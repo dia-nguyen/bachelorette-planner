@@ -195,15 +195,6 @@ export function BudgetView() {
                 >
                   <span className="flex items-center gap-2">
                     <span style={{ fontWeight: 500 }}>{item.title}</span>
-                    {hasLinks && (
-                      <span style={{
-                        fontSize: 10,
-                        color: "var(--color-accent)",
-                        background: "var(--color-accent-soft)",
-                        padding: "1px 5px",
-                        borderRadius: "var(--radius-pill)",
-                      }}>🔗</span>
-                    )}
                   </span>
                   <span><Badge variant="accent">{item.category}</Badge></span>
                   <span>{formatCurrency(item.plannedAmount)}</span>
