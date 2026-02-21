@@ -8,11 +8,14 @@ import {
   resetStore,
   subscribe,
   type BudgetItem,
+  type ChecklistItem,
   type DashboardData,
   type GuestFieldDef,
   type Membership,
   type PanelState,
+  type Photo,
   type PlanActivityInput,
+  type Poll,
   type Role,
   type Task,
   type Trip,
@@ -87,6 +90,23 @@ interface AppContextValue {
   updateBudgetItem: (id: string, patch: Partial<BudgetItem>) => void;
   deleteBudgetItem: (id: string) => void;
 
+  // Checklist items
+  checklistItems: ChecklistItem[];
+  addChecklistItem: (data: Omit<ChecklistItem, "id" | "tripId">) => void;
+  updateChecklistItem: (id: string, patch: Partial<ChecklistItem>) => void;
+  deleteChecklistItem: (id: string) => void;
+
+  // Polls
+  polls: Poll[];
+  addPoll: (data: Omit<Poll, "id" | "tripId">) => void;
+  updatePoll: (id: string, patch: Partial<Poll>) => void;
+  deletePoll: (id: string) => void;
+
+  // Photos
+  photos: Photo[];
+  addPhoto: (data: Omit<Photo, "id" | "tripId">) => void;
+  deletePhoto: (id: string) => void;
+
   // Cross-entity creation helpers
   createTaskForBudgetItem: (budgetItemId: string) => void;
 
@@ -133,6 +153,9 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const budgetItems = useMemo(() => repo.getBudgetItems(tripId), [tick, tripId]);
   const memberships = useMemo(() => repo.getMemberships(tripId), [tick, tripId]);
   const users = useMemo(() => repo.getUsers(tripId), [tick, tripId]);
+  const checklistItems = useMemo(() => repo.getChecklistItems(tripId), [tick, tripId]);
+  const polls = useMemo(() => repo.getPolls(tripId), [tick, tripId]);
+  const photos = useMemo(() => repo.getPhotos(tripId), [tick, tripId]);
   const trip = repo.getTrip(tripId);
 
   const guestFieldSchema: GuestFieldDef[] = trip?.guestFieldSchema ?? [];
@@ -284,6 +307,50 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     []
   );
 
+  // Checklist
+  const addChecklistItem = useCallback(
+    (data: Omit<ChecklistItem, "id" | "tripId">) => {
+      repo.addChecklistItem({ ...data, id: uuid(), tripId });
+    },
+    [tripId]
+  );
+  const updateChecklistItem = useCallback(
+    (id: string, patch: Partial<ChecklistItem>) => repo.updateChecklistItem(id, patch),
+    []
+  );
+  const deleteChecklistItem = useCallback(
+    (id: string) => repo.deleteChecklistItem(id),
+    []
+  );
+
+  // Polls
+  const addPoll = useCallback(
+    (data: Omit<Poll, "id" | "tripId">) => {
+      repo.addPoll({ ...data, id: uuid(), tripId });
+    },
+    [tripId]
+  );
+  const updatePoll = useCallback(
+    (id: string, patch: Partial<Poll>) => repo.updatePoll(id, patch),
+    []
+  );
+  const deletePoll = useCallback(
+    (id: string) => repo.deletePoll(id),
+    []
+  );
+
+  // Photos
+  const addPhoto = useCallback(
+    (data: Omit<Photo, "id" | "tripId">) => {
+      repo.addPhoto({ ...data, id: uuid(), tripId });
+    },
+    [tripId]
+  );
+  const deletePhoto = useCallback(
+    (id: string) => repo.deletePhoto(id),
+    []
+  );
+
   // Create a Task linked to a BudgetItem (and back-link the BudgetItem)
   const createTaskForBudgetItem = useCallback(
     (budgetItemId: string) => {
@@ -401,6 +468,17 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     addBudgetItem,
     updateBudgetItem,
     deleteBudgetItem,
+    checklistItems,
+    addChecklistItem,
+    updateChecklistItem,
+    deleteChecklistItem,
+    polls,
+    addPoll,
+    updatePoll,
+    deletePoll,
+    photos,
+    addPhoto,
+    deletePhoto,
     createTaskForBudgetItem,
     planActivity,
     clearAllData: () => { clearAllData(); closePanel(); },

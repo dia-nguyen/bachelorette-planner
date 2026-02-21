@@ -47,13 +47,13 @@ export function BudgetSnapshot({ breakdown, totalBudget, totalSpent }: BudgetSna
         Budget snapshot
       </h3>
 
-      <div className="flex items-stretch gap-6" style={{ flex: 1, minHeight: 0 }}>
+      <div className="flex flex-wrap items-stretch gap-6" style={{ flex: 1, minHeight: 0 }}>
         {/* Left: total numbers */}
-        <div className="flex flex-col justify-center" style={{ minWidth: 130 }}>
+        <div className="flex flex-col justify-center" style={{ minWidth: 160, flex: "1 1 160px" }}>
           <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
             Total budget
           </p>
-          <p style={{ fontSize: 28, fontWeight: 700 }}>{formatCurrency(totalBudget)}</p>
+          <p style={{ fontSize: 32, fontWeight: 700 }}>{formatCurrency(totalBudget)}</p>
           <div
             style={{
               marginTop: 6,
@@ -78,7 +78,7 @@ export function BudgetSnapshot({ breakdown, totalBudget, totalSpent }: BudgetSna
         </div>
 
         {/* Chart — grows to fill */}
-        <div style={{ flex: 1, position: "relative", minHeight: 160 }}>
+        <div style={{ flex: "2 1 180px", position: "relative", minHeight: 180 }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -87,8 +87,8 @@ export function BudgetSnapshot({ breakdown, totalBudget, totalSpent }: BudgetSna
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius="35%"
-                outerRadius="55%"
+                innerRadius="90%"
+                outerRadius="100%"
                 paddingAngle={2}
                 strokeWidth={0}
               >
@@ -126,9 +126,9 @@ export function BudgetSnapshot({ breakdown, totalBudget, totalSpent }: BudgetSna
         </div>
 
         {/* Legend */}
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex flex-col justify-center gap-2" style={{ minWidth: 140, flex: "1 1 120px" }}>
           {chartData.map((d, i) => (
-            <div key={i} className="flex items-center gap-2" style={{ fontSize: "var(--font-sm)" }}>
+            <div key={i} className="flex items-center gap-2" style={{ fontSize: "var(--font-base, 14px)" }}>
               <span
                 style={{
                   width: 10,

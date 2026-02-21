@@ -141,38 +141,91 @@ export function computeTasksSummary(tasks: Task[]): TasksSummary {
   };
 }
 
-// ---- Payment summary ----
+// ---- Budget summary per person ----
+
+/** Get the attendee user IDs for a budget item (from linked event or explicit list) */
+function getItemAttendees(item: BudgetItem, events: TripEvent[]): string[] {
+  if (item.relatedEventId) {
+    const ev = events.find((e) => e.id === item.relatedEventId);
+    return ev?.attendeeUserIds ?? [];
+  }
+  return item.splitAttendeeUserIds ?? [];
+}
+
+/** Per-person planned amount for one budget item */
+function ppPlanned(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+): number {
+  if (item.splitType === "custom" && item.plannedSplits?.[userId] != null) {
+    return item.plannedSplits[userId];
+  }
+  const attendees = getItemAttendees(item, events);
+  const count = attendees.length || 1;
+  return item.plannedAmount / count;
+}
+
+/** Per-person actual amount for one budget item */
+function ppActual(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+): number {
+  if (item.splitType === "custom" && item.actualSplits?.[userId] != null) {
+    return item.actualSplits[userId];
+  }
+  const attendees = getItemAttendees(item, events);
+  const count = attendees.length || 1;
+  return item.actualAmount / count;
+}
+
+/** Check if a user is involved in a budget item */
+function isInvolved(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+): boolean {
+  if (item.paidByUserId === userId) return true;
+  if (item.responsibleUserId === userId) return true;
+  const attendees = getItemAttendees(item, events);
+  if (attendees.includes(userId)) return true;
+  if (attendees.length === 0) return true;
+  return false;
+}
 
 export function computePaymentsSummary(
   budgetItems: BudgetItem[],
   users: User[],
   memberships: Membership[],
+  events: TripEvent[],
 ): PaymentSummary[] {
-  // Simple model: total cost split equally among accepted members
-  // Each member's share = totalSpent / confirmedCount
-  // What they've paid = sum of actualAmount where paidByUserId = them
-  // owes = share - paid (if positive)
   const confirmedUserIds = memberships
     .filter((m) => m.inviteStatus === "ACCEPTED")
     .map((m) => m.userId);
-  const totalSpent = budgetItems.reduce((s, b) => s + b.actualAmount, 0);
-  const perPerson =
-    confirmedUserIds.length > 0 ? totalSpent / confirmedUserIds.length : 0;
 
-  return confirmedUserIds
-    .map((uid) => {
-      const user = users.find((u) => u.id === uid);
-      const paid = budgetItems
-        .filter((b) => b.paidByUserId === uid)
-        .reduce((s, b) => s + b.actualAmount, 0);
-      return {
-        userId: uid,
-        userName: user?.name ?? "Unknown",
-        owes: Math.max(0, Math.round(perPerson - paid)),
-        avatarColor: user?.avatarColor,
-      };
-    })
-    .filter((p) => p.owes > 0);
+  return confirmedUserIds.map((uid) => {
+    const user = users.find((u) => u.id === uid);
+    let planned = 0;
+    let actual = 0;
+    let paid = 0;
+    for (const item of budgetItems) {
+      if (!isInvolved(item, uid, events)) continue;
+      planned += ppPlanned(item, uid, events);
+      actual += ppActual(item, uid, events);
+      if (item.paidByUserId === uid) {
+        paid += item.actualAmount;
+      }
+    }
+    return {
+      userId: uid,
+      userName: user?.name ?? "Unknown",
+      planned: Math.round(planned),
+      actual: Math.round(actual),
+      paid: Math.round(paid),
+      avatarColor: user?.avatarColor,
+    };
+  });
 }
 
 // ---- My tasks ----
@@ -216,6 +269,11 @@ export function computeDashboard(
     budgetBreakdownByCategory: computeBudgetBreakdown(budgetItems),
     myTasks: computeMyTasks(tasks, currentUserId),
     allTasksSummary: computeTasksSummary(tasks),
-    paymentsSummary: computePaymentsSummary(budgetItems, users, memberships),
+    paymentsSummary: computePaymentsSummary(
+      budgetItems,
+      users,
+      memberships,
+      events,
+    ),
   };
 }

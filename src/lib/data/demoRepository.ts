@@ -2,8 +2,11 @@ import { type DemoStore, initialDemoStore } from "./demoData";
 import type { Repository } from "./repository";
 import type {
   BudgetItem,
+  ChecklistItem,
   GuestFieldDef,
   Membership,
+  Photo,
+  Poll,
   Task,
   Trip,
   TripEvent,
@@ -16,7 +19,14 @@ function loadStore(): DemoStore {
   if (typeof window === "undefined") return structuredClone(initialDemoStore);
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as DemoStore;
+    if (raw) {
+      const parsed = JSON.parse(raw) as DemoStore;
+      // Back-fill arrays added after initial schema
+      if (!parsed.checklistItems) parsed.checklistItems = [];
+      if (!parsed.polls) parsed.polls = [];
+      if (!parsed.photos) parsed.photos = [];
+      return parsed;
+    }
   } catch {
     // corrupted — reset
   }
@@ -69,6 +79,9 @@ export function clearAllData(): void {
   s.events = [];
   s.tasks = [];
   s.budgetItems = [];
+  s.checklistItems = [];
+  s.polls = [];
+  s.photos = [];
   persist();
   notify();
 }
@@ -232,6 +245,64 @@ export const demoRepository: Repository = {
   deleteBudgetItem(itemId: string): void {
     const s = getStore();
     s.budgetItems = s.budgetItems.filter((b) => b.id !== itemId);
+    notify();
+  },
+
+  // Checklist Items
+  getChecklistItems(tripId: string): ChecklistItem[] {
+    return getStore().checklistItems.filter((c) => c.tripId === tripId);
+  },
+  addChecklistItem(item: ChecklistItem): void {
+    getStore().checklistItems.push(item);
+    notify();
+  },
+  updateChecklistItem(itemId: string, patch: Partial<ChecklistItem>): void {
+    const s = getStore();
+    const idx = s.checklistItems.findIndex((c) => c.id === itemId);
+    if (idx !== -1) {
+      s.checklistItems[idx] = { ...s.checklistItems[idx], ...patch };
+      notify();
+    }
+  },
+  deleteChecklistItem(itemId: string): void {
+    const s = getStore();
+    s.checklistItems = s.checklistItems.filter((c) => c.id !== itemId);
+    notify();
+  },
+
+  // Polls
+  getPolls(tripId: string): Poll[] {
+    return getStore().polls.filter((p) => p.tripId === tripId);
+  },
+  addPoll(poll: Poll): void {
+    getStore().polls.push(poll);
+    notify();
+  },
+  updatePoll(pollId: string, patch: Partial<Poll>): void {
+    const s = getStore();
+    const idx = s.polls.findIndex((p) => p.id === pollId);
+    if (idx !== -1) {
+      s.polls[idx] = { ...s.polls[idx], ...patch };
+      notify();
+    }
+  },
+  deletePoll(pollId: string): void {
+    const s = getStore();
+    s.polls = s.polls.filter((p) => p.id !== pollId);
+    notify();
+  },
+
+  // Photos
+  getPhotos(tripId: string): Photo[] {
+    return getStore().photos.filter((p) => p.tripId === tripId);
+  },
+  addPhoto(photo: Photo): void {
+    getStore().photos.push(photo);
+    notify();
+  },
+  deletePhoto(photoId: string): void {
+    const s = getStore();
+    s.photos = s.photos.filter((p) => p.id !== photoId);
     notify();
   },
 };

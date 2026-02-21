@@ -153,7 +153,9 @@ export interface CategoryBreakdown {
 export interface PaymentSummary {
   userId: string;
   userName: string;
-  owes: number;
+  planned: number;
+  actual: number;
+  paid: number;
   avatarColor?: string;
 }
 
@@ -220,4 +222,53 @@ export interface PlanActivityInput {
   budgetResponsibleId?: string | null;
   budgetPaidById?: string | null;
   budgetNotes?: string;
+}
+
+// ---- Checklist ----
+
+export type ChecklistCategory =
+  | "Clothing"
+  | "Toiletries"
+  | "Accessories"
+  | "Decorations"
+  | "Supplies"
+  | "Other";
+
+export interface ChecklistItem {
+  id: string;
+  tripId: string;
+  title: string;
+  isChecked: boolean;
+  assigneeUserId: string | null;
+  category: ChecklistCategory;
+}
+
+// ---- Polls ----
+
+export interface PollOption {
+  id: string;
+  label: string;
+  voterUserIds: string[];
+}
+
+export interface Poll {
+  id: string;
+  tripId: string;
+  question: string;
+  createdByUserId: string;
+  options: PollOption[];
+  isClosed: boolean;
+}
+
+// ---- Photos ----
+
+export interface Photo {
+  id: string;
+  tripId: string;
+  /** base64 data URI for demo mode */
+  url: string;
+  caption: string;
+  uploadedByUserId: string;
+  relatedEventId: string | null;
+  createdAt: string; // ISO
 }

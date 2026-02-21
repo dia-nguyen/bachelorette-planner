@@ -19,33 +19,89 @@ export function PaymentsTracker({ payments }: PaymentsTrackerProps) {
           marginBottom: "var(--space-md)",
         }}
       >
-        Payments Tracker
+        Budget Summary
       </h3>
 
       {payments.length === 0 ? (
-        <EmptyState message="All payments settled" />
+        <EmptyState message="No budget data yet" />
       ) : (
         <div className="flex flex-col gap-3">
-          {payments.map((p) => (
-            <div key={p.userId} className="flex items-center gap-3">
-              <Avatar name={p.userName} color={p.avatarColor} size={32} />
-              <span className="flex-1" style={{ fontWeight: 500 }}>
-                {p.userName} owes
-              </span>
-              <span
-                style={{
-                  fontWeight: 600,
-                  color: "#DC2626",
-                  padding: "2px 12px",
-                  borderRadius: "var(--radius-pill)",
-                  background: "var(--color-status-negative)",
-                  fontSize: "var(--font-sm)",
-                }}
+          {/* Header row */}
+          <div
+            className="grid items-center gap-2"
+            style={{
+              gridTemplateColumns: "1fr auto auto auto",
+              fontSize: "var(--font-xs)",
+              color: "var(--color-text-tertiary)",
+              fontWeight: 600,
+              textTransform: "uppercase" as const,
+              letterSpacing: "0.04em",
+            }}
+          >
+            <span>Person</span>
+            <span style={{ textAlign: "right", minWidth: 68 }}>Planned</span>
+            <span style={{ textAlign: "right", minWidth: 68 }}>Actual</span>
+            <span style={{ textAlign: "right", minWidth: 68 }}>Paid</span>
+          </div>
+
+          {payments.map((p) => {
+            const balance = p.paid - p.actual;
+            return (
+              <div
+                key={p.userId}
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: "1fr auto auto auto" }}
               >
-                {formatCurrency(p.owes)}
-              </span>
-            </div>
-          ))}
+                {/* Name + avatar */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Avatar name={p.userName} color={p.avatarColor} size={28} />
+                  <span
+                    className="truncate"
+                    style={{ fontWeight: 500, fontSize: "var(--font-sm)" }}
+                  >
+                    {p.userName}
+                  </span>
+                </div>
+
+                {/* Planned */}
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontSize: "var(--font-sm)",
+                    color: "var(--color-text-secondary)",
+                    minWidth: 68,
+                  }}
+                >
+                  {formatCurrency(p.planned)}
+                </span>
+
+                {/* Actual */}
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontSize: "var(--font-sm)",
+                    fontWeight: 500,
+                    minWidth: 68,
+                  }}
+                >
+                  {formatCurrency(p.actual)}
+                </span>
+
+                {/* Paid */}
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontSize: "var(--font-sm)",
+                    fontWeight: 600,
+                    minWidth: 68,
+                    color: balance >= 0 ? "var(--color-status-positive-text, #16a34a)" : "#DC2626",
+                  }}
+                >
+                  {formatCurrency(p.paid)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>

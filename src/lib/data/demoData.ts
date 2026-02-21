@@ -1,6 +1,9 @@
 import type {
   BudgetItem,
+  ChecklistItem,
   Membership,
+  Photo,
+  Poll,
   Task,
   Trip,
   TripEvent,
@@ -467,6 +470,149 @@ export const demoBudgetItems: BudgetItem[] = [
   },
 ];
 
+// ---- Checklist Items ----
+export const demoChecklistItems: ChecklistItem[] = [
+  {
+    id: "cl1",
+    tripId: "trip1",
+    title: "Sunscreen SPF 50+",
+    isChecked: true,
+    assigneeUserId: null,
+    category: "Toiletries",
+  },
+  {
+    id: "cl2",
+    tripId: "trip1",
+    title: "Matching swimsuits",
+    isChecked: false,
+    assigneeUserId: "u2",
+    category: "Clothing",
+  },
+  {
+    id: "cl3",
+    tripId: "trip1",
+    title: "Bachelorette sashes",
+    isChecked: false,
+    assigneeUserId: "u3",
+    category: "Accessories",
+  },
+  {
+    id: "cl4",
+    tripId: "trip1",
+    title: "Tiara for Sophie",
+    isChecked: true,
+    assigneeUserId: "u1",
+    category: "Accessories",
+  },
+  {
+    id: "cl5",
+    tripId: "trip1",
+    title: "Balloon set (pink & gold)",
+    isChecked: false,
+    assigneeUserId: "u3",
+    category: "Decorations",
+  },
+  {
+    id: "cl6",
+    tripId: "trip1",
+    title: "Party banners",
+    isChecked: false,
+    assigneeUserId: "u3",
+    category: "Decorations",
+  },
+  {
+    id: "cl7",
+    tripId: "trip1",
+    title: "Portable speaker",
+    isChecked: true,
+    assigneeUserId: "u4",
+    category: "Supplies",
+  },
+  {
+    id: "cl8",
+    tripId: "trip1",
+    title: "Sunglasses (party favor)",
+    isChecked: false,
+    assigneeUserId: "u2",
+    category: "Accessories",
+  },
+  {
+    id: "cl9",
+    tripId: "trip1",
+    title: "Pool floats",
+    isChecked: false,
+    assigneeUserId: null,
+    category: "Supplies",
+  },
+  {
+    id: "cl10",
+    tripId: "trip1",
+    title: "Going-out outfits",
+    isChecked: false,
+    assigneeUserId: null,
+    category: "Clothing",
+  },
+  {
+    id: "cl11",
+    tripId: "trip1",
+    title: "First aid kit",
+    isChecked: true,
+    assigneeUserId: "u1",
+    category: "Supplies",
+  },
+  {
+    id: "cl12",
+    tripId: "trip1",
+    title: "Phone chargers",
+    isChecked: false,
+    assigneeUserId: null,
+    category: "Other",
+  },
+];
+
+// ---- Polls ----
+export const demoPolls: Poll[] = [
+  {
+    id: "poll1",
+    tripId: "trip1",
+    question: "Which restaurant for Saturday dinner?",
+    createdByUserId: "u1",
+    options: [
+      { id: "po1", label: "Fancy Bistro", voterUserIds: ["u1", "u3"] },
+      { id: "po2", label: "Seaside Grill", voterUserIds: ["u2", "u4"] },
+      { id: "po3", label: "Sushi Palace", voterUserIds: [] },
+    ],
+    isClosed: false,
+  },
+  {
+    id: "poll2",
+    tripId: "trip1",
+    question: "Theme color for the party?",
+    createdByUserId: "u1",
+    options: [
+      { id: "po4", label: "Pink & Gold", voterUserIds: ["u1", "u2", "u3"] },
+      { id: "po5", label: "Tropical (green & coral)", voterUserIds: ["u4"] },
+      { id: "po6", label: "All White", voterUserIds: [] },
+    ],
+    isClosed: false,
+  },
+  {
+    id: "poll3",
+    tripId: "trip1",
+    question: "Pool party start time?",
+    createdByUserId: "u2",
+    options: [
+      { id: "po7", label: "1:00 PM", voterUserIds: ["u2"] },
+      { id: "po8", label: "2:00 PM", voterUserIds: ["u1", "u3", "u4"] },
+      { id: "po9", label: "3:00 PM", voterUserIds: [] },
+    ],
+    isClosed: true,
+  },
+];
+
+// ---- Photos (placeholder URLs for demo) ----
+export const demoPhotos: Photo[] = [];
+
 // ---- Entire demo store shape ----
 export interface DemoStore {
   users: User[];
@@ -475,6 +621,9 @@ export interface DemoStore {
   events: TripEvent[];
   tasks: Task[];
   budgetItems: BudgetItem[];
+  checklistItems: ChecklistItem[];
+  polls: Poll[];
+  photos: Photo[];
 }
 
 export const initialDemoStore: DemoStore = {
@@ -484,4 +633,7 @@ export const initialDemoStore: DemoStore = {
   events: demoEvents,
   tasks: demoTasks,
   budgetItems: demoBudgetItems,
+  checklistItems: demoChecklistItems,
+  polls: demoPolls,
+  photos: demoPhotos,
 };

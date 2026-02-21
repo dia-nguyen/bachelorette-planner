@@ -1,7 +1,10 @@
 import type {
   BudgetItem,
+  ChecklistItem,
   GuestFieldDef,
   Membership,
+  Photo,
+  Poll,
   Task,
   Trip,
   TripEvent,
@@ -54,4 +57,21 @@ export interface Repository {
   addBudgetItem(item: BudgetItem): void;
   updateBudgetItem(itemId: string, patch: Partial<BudgetItem>): void;
   deleteBudgetItem(itemId: string): void;
+
+  // Checklist Items
+  getChecklistItems(tripId: string): ChecklistItem[];
+  addChecklistItem(item: ChecklistItem): void;
+  updateChecklistItem(itemId: string, patch: Partial<ChecklistItem>): void;
+  deleteChecklistItem(itemId: string): void;
+
+  // Polls
+  getPolls(tripId: string): Poll[];
+  addPoll(poll: Poll): void;
+  updatePoll(pollId: string, patch: Partial<Poll>): void;
+  deletePoll(pollId: string): void;
+
+  // Photos
+  getPhotos(tripId: string): Photo[];
+  addPhoto(photo: Photo): void;
+  deletePhoto(photoId: string): void;
 }
