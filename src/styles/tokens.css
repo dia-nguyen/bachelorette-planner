@@ -1,0 +1,47 @@
+/* ============================================================
+   Design Tokens — Single Source of Truth
+   From design-styles.json "soft-neutral" theme
+   ============================================================ */
+
+:root {
+  /* ---- Colors ---- */
+  --color-bg-app: #e9d5f0;
+  --color-bg-surface: #ffffff;
+  --color-bg-muted: #f5f6f8;
+  --color-border: #e5e7eb;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-accent: #a78bfa;
+  --color-accent-soft: #e9d5ff;
+  --color-status-positive: #bbf7d0;
+  --color-status-warning: #fde68a;
+  --color-status-negative: #fca5a5;
+
+  /* ---- Radius ---- */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  /* ---- Shadow ---- */
+  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* ---- Spacing ---- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* ---- Typography ---- */
+  --font-family: "Inter", system-ui, sans-serif;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-lg: 18px;
+  --font-xl: 24px;
+
+  /* ---- Layout ---- */
+  --sidebar-width: 72px;
+  --context-panel-width: 520px;
+}
