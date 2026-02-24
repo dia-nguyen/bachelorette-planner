@@ -1,10 +1,11 @@
 "use client";
 
+import { useAuth } from "@/lib/context/AuthContext";
 import {
   clearAllData,
-  demoRepository,
   exportStore,
   importStore,
+  repository,
   resetStore,
   subscribe,
   type BudgetItem,
@@ -24,6 +25,10 @@ import {
 } from "@/lib/data";
 import { computeDashboard } from "@/lib/domain";
 import {
+  createClient as createSupabaseClient,
+  isSupabaseConfigured,
+} from "@/lib/supabase/client";
+import {
   createContext,
   useCallback,
   useContext,
@@ -37,6 +42,7 @@ import { v4 as uuid } from "uuid";
 // ---- Default trip & user for demo ----
 const DEMO_TRIP_ID = "trip1";
 const DEMO_USER_ID = "u1"; // Sarah Kim (MOH_ADMIN)
+const repo = repository;
 
 interface AppContextValue {
   // Current session
@@ -126,11 +132,252 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode; }) {
+  const { user } = useAuth();
+  const isSupabaseMode =
+    process.env.NEXT_PUBLIC_DATA_MODE === "supabase" && isSupabaseConfigured();
+
+  const [tripId] = useState<string>(DEMO_TRIP_ID);
+  const [currentUserId] = useState<string>(DEMO_USER_ID);
   const [tick, setTick] = useState(0);
+
+  const [supabaseTripId, setSupabaseTripId] = useState<string | null>(null);
+  const [supabaseTrip, setSupabaseTrip] = useState<Trip | null>(null);
+  const [supabaseUsers, setSupabaseUsers] = useState<User[]>([]);
+  const [supabaseMemberships, setSupabaseMemberships] = useState<Membership[]>([]);
+  const [supabaseEvents, setSupabaseEvents] = useState<TripEvent[]>([]);
+  const [supabaseTasks, setSupabaseTasks] = useState<Task[]>([]);
+  const [supabaseBudgetItems, setSupabaseBudgetItems] = useState<BudgetItem[]>([]);
+  const [supabaseChecklistItems, setSupabaseChecklistItems] = useState<ChecklistItem[]>([]);
+  const [supabasePolls, setSupabasePolls] = useState<Poll[]>([]);
+  const [supabasePhotos, setSupabasePhotos] = useState<Photo[]>([]);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   // Subscribe to repository changes
-  useEffect(() => subscribe(refresh), [refresh]);
+  useEffect(() => {
+    if (isSupabaseMode) return;
+    return subscribe(refresh);
+  }, [isSupabaseMode, refresh]);
+
+  useEffect(() => {
+    if (!isSupabaseMode || !user?.id) return;
+
+    let isCancelled = false;
+
+    const run = async () => {
+      const supabase = createSupabaseClient();
+
+      const [myMembership, createdTrip] = await Promise.all([
+        supabase
+          .from("memberships")
+          .select("trip_id")
+          .eq("profile_id", user.id)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("trips")
+          .select("id")
+          .eq("created_by", user.id)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (isCancelled) return;
+
+      const activeTripId = myMembership.data?.trip_id ?? createdTrip.data?.id ?? null;
+      setSupabaseTripId(activeTripId);
+
+      if (!activeTripId) {
+        setSupabaseTrip(null);
+        setSupabaseUsers([]);
+        setSupabaseMemberships([]);
+        setSupabaseEvents([]);
+        setSupabaseTasks([]);
+        setSupabaseBudgetItems([]);
+        setSupabaseChecklistItems([]);
+        setSupabasePolls([]);
+        setSupabasePhotos([]);
+        return;
+      }
+
+      const [tripRes, membershipsRes, eventsRes, tasksRes, budgetRes, checklistRes, pollsRes, photosRes] =
+        await Promise.all([
+          supabase.from("trips").select("*").eq("id", activeTripId).maybeSingle(),
+          supabase.from("memberships").select("*").eq("trip_id", activeTripId),
+          supabase.from("events").select("*").eq("trip_id", activeTripId),
+          supabase.from("tasks").select("*").eq("trip_id", activeTripId),
+          supabase.from("budget_items").select("*").eq("trip_id", activeTripId),
+          supabase.from("checklist_items").select("*").eq("trip_id", activeTripId),
+          supabase.from("polls").select("*").eq("trip_id", activeTripId),
+          supabase.from("photos").select("*").eq("trip_id", activeTripId),
+        ]);
+
+      if (isCancelled) return;
+
+      if (tripRes.data) {
+        setSupabaseTrip({
+          id: tripRes.data.id,
+          name: tripRes.data.name,
+          startAt: String(tripRes.data.start_at),
+          endAt: String(tripRes.data.end_at),
+          location: tripRes.data.location,
+          description: tripRes.data.description ?? "",
+          createdByUserId: tripRes.data.created_by,
+          guestFieldSchema: (tripRes.data.guest_field_schema ?? []) as GuestFieldDef[],
+        });
+      }
+
+      const mappedMemberships: Membership[] = (membershipsRes.data ?? []).map((m) => ({
+        tripId: m.trip_id,
+        userId: m.profile_id,
+        role: m.role,
+        inviteStatus: m.invite_status,
+      }));
+
+      if (
+        tripRes.data?.created_by &&
+        !mappedMemberships.some((m) => m.userId === tripRes.data.created_by)
+      ) {
+        mappedMemberships.unshift({
+          tripId: activeTripId,
+          userId: tripRes.data.created_by,
+          role: "MOH_ADMIN",
+          inviteStatus: "ACCEPTED",
+        });
+      }
+
+      setSupabaseMemberships(mappedMemberships);
+
+      const profileIds = Array.from(new Set(mappedMemberships.map((m) => m.userId)));
+      if (profileIds.length > 0) {
+        const profilesRes = await supabase
+          .from("profiles")
+          .select("id,name,email,avatar_color,custom_fields")
+          .in("id", profileIds);
+
+        if (isCancelled) return;
+
+        const mappedUsers: User[] = (profilesRes.data ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          avatarColor: p.avatar_color ?? undefined,
+          customFields: (p.custom_fields ?? {}) as Record<string, string>,
+        }));
+
+        for (const member of mappedMemberships) {
+          if (!mappedUsers.some((u) => u.id === member.userId)) {
+            const isCurrent = member.userId === user.id;
+            mappedUsers.push({
+              id: member.userId,
+              name: isCurrent
+                ? user.user_metadata?.name ?? user.email?.split("@")[0] ?? "You"
+                : "Guest",
+              email: isCurrent ? user.email ?? "" : "",
+            });
+          }
+        }
+
+        setSupabaseUsers(mappedUsers);
+      } else {
+        setSupabaseUsers([]);
+      }
+
+      setSupabaseEvents(
+        (eventsRes.data ?? []).map((e) => ({
+          id: e.id,
+          tripId: e.trip_id,
+          title: e.title,
+          startAt: e.start_at,
+          endAt: e.end_at ?? undefined,
+          location: e.location,
+          description: e.description ?? "",
+          status: e.status,
+          provider: e.provider ?? undefined,
+          confirmationCode: e.confirmation_code ?? undefined,
+          attendeeUserIds: (e.attendee_user_ids ?? []) as string[],
+        })),
+      );
+
+      setSupabaseTasks(
+        (tasksRes.data ?? []).map((t) => ({
+          id: t.id,
+          tripId: t.trip_id,
+          title: t.title,
+          description: t.description ?? "",
+          status: t.status,
+          priority: t.priority,
+          dueAt: t.due_at,
+          assigneeUserIds: (t.assignee_user_ids ?? []) as string[],
+          relatedEventId: t.related_event_id,
+          relatedBudgetItemId: t.related_budget_item_id,
+        })),
+      );
+
+      setSupabaseBudgetItems(
+        (budgetRes.data ?? []).map((b) => ({
+          id: b.id,
+          tripId: b.trip_id,
+          title: b.title,
+          category: b.category,
+          plannedAmount: Number(b.planned_amount ?? 0),
+          actualAmount: Number(b.actual_amount ?? 0),
+          currency: b.currency ?? "USD",
+          responsibleUserId: b.responsible_user_id,
+          paidByUserId: b.paid_by_user_id,
+          status: b.status,
+          relatedEventId: b.related_event_id,
+          relatedTaskId: b.related_task_id,
+          notes: b.notes ?? "",
+          costMode: b.cost_mode ?? undefined,
+          splitType: b.split_type ?? undefined,
+          plannedSplits: (b.planned_splits ?? undefined) as Record<string, number> | undefined,
+          actualSplits: (b.actual_splits ?? undefined) as Record<string, number> | undefined,
+          splitAttendeeUserIds: (b.split_attendee_user_ids ?? []) as string[],
+        })),
+      );
+
+      setSupabaseChecklistItems(
+        (checklistRes.data ?? []).map((c) => ({
+          id: c.id,
+          tripId: c.trip_id,
+          title: c.title,
+          isChecked: c.is_checked,
+          assigneeUserId: c.assignee_user_id,
+          category: c.category,
+        })),
+      );
+
+      setSupabasePolls(
+        (pollsRes.data ?? []).map((p) => ({
+          id: p.id,
+          tripId: p.trip_id,
+          question: p.question,
+          createdByUserId: p.created_by_user_id,
+          options: (p.options ?? []) as Poll["options"],
+          isClosed: p.is_closed,
+        })),
+      );
+
+      setSupabasePhotos(
+        (photosRes.data ?? []).map((p) => ({
+          id: p.id,
+          tripId: p.trip_id,
+          url: p.url,
+          caption: p.caption ?? "",
+          uploadedByUserId: p.uploaded_by_user_id,
+          relatedEventId: p.related_event_id,
+          createdAt: p.created_at,
+        })),
+      );
+    };
+
+    void run();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isSupabaseMode, user, tick]);
 
   // Panel state
   const [panel, setPanel] = useState<PanelState>({ type: null, id: null });
@@ -143,27 +390,59 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     []
   );
 
-  const repo = demoRepository;
-  const tripId = DEMO_TRIP_ID;
-  const currentUserId = DEMO_USER_ID;
-
   // Read data — re-reads on every tick
-  const events = useMemo(() => repo.getEvents(tripId), [tick, tripId]);
-  const tasks = useMemo(() => repo.getTasks(tripId), [tick, tripId]);
-  const budgetItems = useMemo(() => repo.getBudgetItems(tripId), [tick, tripId]);
-  const memberships = useMemo(() => repo.getMemberships(tripId), [tick, tripId]);
-  const users = useMemo(() => repo.getUsers(tripId), [tick, tripId]);
-  const checklistItems = useMemo(() => repo.getChecklistItems(tripId), [tick, tripId]);
-  const polls = useMemo(() => repo.getPolls(tripId), [tick, tripId]);
-  const photos = useMemo(() => repo.getPhotos(tripId), [tick, tripId]);
-  const trip = repo.getTrip(tripId);
+  const demoEvents = useMemo(() => {
+    void tick;
+    return repo.getEvents(tripId);
+  }, [tick, tripId]);
+  const demoTasks = useMemo(() => {
+    void tick;
+    return repo.getTasks(tripId);
+  }, [tick, tripId]);
+  const demoBudgetItems = useMemo(() => {
+    void tick;
+    return repo.getBudgetItems(tripId);
+  }, [tick, tripId]);
+  const demoMemberships = useMemo(() => {
+    void tick;
+    return repo.getMemberships(tripId);
+  }, [tick, tripId]);
+  const demoUsers = useMemo(() => {
+    void tick;
+    return repo.getUsers(tripId);
+  }, [tick, tripId]);
+  const demoChecklistItems = useMemo(() => {
+    void tick;
+    return repo.getChecklistItems(tripId);
+  }, [tick, tripId]);
+  const demoPolls = useMemo(() => {
+    void tick;
+    return repo.getPolls(tripId);
+  }, [tick, tripId]);
+  const demoPhotos = useMemo(() => {
+    void tick;
+    return repo.getPhotos(tripId);
+  }, [tick, tripId]);
+
+  const effectiveTripId = isSupabaseMode ? supabaseTripId ?? DEMO_TRIP_ID : tripId;
+  const effectiveCurrentUserId = isSupabaseMode ? user?.id ?? DEMO_USER_ID : currentUserId;
+
+  const trip = isSupabaseMode ? supabaseTrip : (repo.getTrip(tripId) ?? null);
+  const events = isSupabaseMode ? supabaseEvents : demoEvents;
+  const tasks = isSupabaseMode ? supabaseTasks : demoTasks;
+  const budgetItems = isSupabaseMode ? supabaseBudgetItems : demoBudgetItems;
+  const memberships = isSupabaseMode ? supabaseMemberships : demoMemberships;
+  const users = isSupabaseMode ? supabaseUsers : demoUsers;
+  const checklistItems = isSupabaseMode ? supabaseChecklistItems : demoChecklistItems;
+  const polls = isSupabaseMode ? supabasePolls : demoPolls;
+  const photos = isSupabaseMode ? supabasePhotos : demoPhotos;
 
   const guestFieldSchema: GuestFieldDef[] = trip?.guestFieldSchema ?? [];
 
   const currentRole: Role = useMemo(() => {
-    const m = memberships.find((mb) => mb.userId === currentUserId);
+    const m = memberships.find((mb) => mb.userId === effectiveCurrentUserId);
     return m?.role ?? "GUEST_CONFIRMED";
-  }, [memberships, currentUserId]);
+  }, [memberships, effectiveCurrentUserId]);
 
   // Dashboard aggregation (memoized)
   const dashboard = useMemo(() => {
@@ -194,10 +473,9 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       events,
       tasks,
       budgetItems,
-      currentUserId
+      effectiveCurrentUserId
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, tripId]);
+  }, [trip, memberships, users, events, tasks, budgetItems, effectiveCurrentUserId]);
 
   // ---- Mutation handlers ----
 
@@ -437,8 +715,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   );
 
   const value: AppContextValue = {
-    tripId,
-    currentUserId,
+    tripId: effectiveTripId,
+    currentUserId: effectiveCurrentUserId,
     currentRole,
     trip: trip ?? null,
     updateTrip,

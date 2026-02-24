@@ -317,7 +317,7 @@ function GuestTableRow({
 
 export function GuestsView() {
   const {
-    memberships, users, guestFieldSchema,
+    memberships, users, guestFieldSchema, tripId,
     inviteUser, updateUser, updateMembershipStatus, updateMemberRole,
     addGuestField, removeGuestField, reorderGuestFields,
   } = useApp();
@@ -325,13 +325,56 @@ export function GuestsView() {
   const [showSchemaManager, setShowSchemaManager] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
 
-  const handleInvite = () => {
+  const handleGuestAction = async (action: "add" | "invite") => {
     if (!name.trim() || !email.trim()) return;
-    inviteUser(name.trim(), email.trim());
+
+    setInviteError(null);
+    setInviteMessage(null);
+
+    if (process.env.NEXT_PUBLIC_DATA_MODE === "demo") {
+      inviteUser(name.trim(), email.trim());
+      setInviteMessage(action === "invite" ? "Guest added in demo mode." : "Guest added.");
+      setName("");
+      setEmail("");
+      setShowInviteForm(false);
+      return;
+    }
+
+    try {
+      setInviteLoading(true);
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          tripId,
+          action,
+        }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        setInviteError(payload?.error ?? (action === "invite" ? "Failed to send invite." : "Failed to add guest."));
+        return;
+      }
+
+      setInviteMessage(action === "invite" ? "Invite email sent." : "Guest added without invite.");
+      setName("");
+      setEmail("");
+      setShowInviteForm(false);
+    } catch {
+      setInviteError(action === "invite" ? "Unable to send invite right now." : "Unable to add guest right now.");
+    } finally {
+      setInviteLoading(false);
+    }
+
     setName("");
     setEmail("");
-    setShowInviteForm(false);
   };
 
   // fixed cols: Guest, Email, Role, RSVP, ...custom, Actions
@@ -353,7 +396,7 @@ export function GuestsView() {
             onClick={() => setShowInviteForm((v) => !v)}
             style={{ padding: "8px 20px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 500, cursor: "pointer" }}
           >
-            + Invite Guest
+            + Add Guest
           </button>
         </div>
       </div>
@@ -369,18 +412,36 @@ export function GuestsView() {
             <label style={{ flex: "1 1 160px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
               Name
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Guest name"
-                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") handleInvite(); }} autoFocus />
+                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") void handleGuestAction("add"); }} autoFocus />
             </label>
             <label style={{ flex: "1 1 200px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
               Email
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@example.com"
-                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") handleInvite(); }} />
+                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") void handleGuestAction("add"); }} />
             </label>
             <div className="flex gap-2" style={{ paddingBottom: 1 }}>
-              <button onClick={handleInvite} style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "var(--font-sm)" }}>Send Invite</button>
+              <button
+                onClick={() => void handleGuestAction("add")}
+                disabled={inviteLoading}
+                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", color: "var(--color-text)", fontWeight: 600, cursor: inviteLoading ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: inviteLoading ? 0.7 : 1 }}
+              >
+                {inviteLoading ? "Saving..." : "Add Only"}
+              </button>
+              <button
+                onClick={() => void handleGuestAction("invite")}
+                disabled={inviteLoading}
+                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: inviteLoading ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: inviteLoading ? 0.7 : 1 }}
+              >
+                {inviteLoading ? "Sending..." : "Add + Invite"}
+              </button>
               <button onClick={() => setShowInviteForm(false)} style={{ padding: "6px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}>Cancel</button>
             </div>
           </div>
+          <p style={{ marginTop: 10, color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
+            Add only keeps them admin-managed. Add + Invite sends a magic link so they can claim and edit their own profile.
+          </p>
+          {inviteMessage ? <p style={{ marginTop: 10, color: "#15803d", fontSize: "var(--font-sm)" }}>{inviteMessage}</p> : null}
+          {inviteError ? <p style={{ marginTop: 10, color: "#dc2626", fontSize: "var(--font-sm)" }}>{inviteError}</p> : null}
         </div>
       )}
 

@@ -174,7 +174,6 @@ export function BudgetView() {
             </div>
             {filteredItems.map((item) => {
               const payer = users.find((u) => u.id === item.paidByUserId);
-              const hasLinks = item.relatedEventId || item.relatedTaskId;
               const yourShare = selectedUserId !== "all"
                 ? (item.actualAmount > 0 ? perPersonActual(item, selectedUserId, events) : perPersonPlanned(item, selectedUserId, events))
                 : 0;
