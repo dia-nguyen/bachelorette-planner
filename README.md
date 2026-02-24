@@ -2,6 +2,8 @@
 
 A full-featured bachelorette trip planner — budget tracking, guest management, events, tasks, timeline, and a real-time dashboard. Ships with a zero-config demo mode and an optional Supabase backend for multi-user auth.
 
+<img width="1783" height="1112" alt="image" src="https://github.com/user-attachments/assets/f4e3c9fb-72cd-4298-b49c-ea7f421a7227" />
+
 ## Quick Start
 
 ```bash
