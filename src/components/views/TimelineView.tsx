@@ -18,12 +18,6 @@ function dateKey(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10);
 }
 
-interface DayGroup {
-  date: string; // YYYY-MM-DD
-  label: string;
-  events: typeof import("@/lib/data").prototype;
-}
-
 export function TimelineView() {
   const { events, users, openPanel } = useApp();
 

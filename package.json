@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.4",
     "@chakra-ui/react": "^3.33.0",
     "@emotion/react": "^11.14.0",
     "@hookform/resolvers": "^5.2.2",

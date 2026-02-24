@@ -1,3 +1,4 @@
+import { AuthProvider } from "@/lib/context/AuthContext";
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -20,7 +21,9 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

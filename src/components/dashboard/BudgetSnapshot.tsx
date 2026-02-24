@@ -32,9 +32,6 @@ export function BudgetSnapshot({ breakdown, totalBudget, totalSpent }: BudgetSna
     color: CATEGORY_COLORS[b.category] ?? "#9CA3AF",
   }));
 
-  // Count people who still need to pay (simplified)
-  const unpaid = breakdown.filter((b) => b.actual === 0 && b.planned > 0).length;
-
   return (
     <Card className="h-full flex flex-col">
       <h3
