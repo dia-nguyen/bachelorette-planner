@@ -54,32 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode; }) {
       setLoading(false);
 
       if (currentSession?.user) {
-        void hydrateProfile(currentSession.user.id);
+        void hydrateProfile();
       }
     }
 
-    async function hydrateProfile(userId: string) {
-      const profileResult = await supabase
-        .from("profiles")
-        .select("is_verified")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (!profileResult.error) {
-        setIsVerified(Boolean(profileResult.data?.is_verified));
-      }
-
-      const membershipResult = await supabase
-        .from("memberships")
-        .select("role")
-        .eq("profile_id", userId)
-        .limit(1)
-        .maybeSingle();
-
-      if (!membershipResult.error && membershipResult.data?.role === "MOH_ADMIN") {
-        setRole("MOH_ADMIN");
-      } else {
-        setRole("GUEST_CONFIRMED");
+    async function hydrateProfile() {
+      // Use server-side API route instead of direct PostgREST queries
+      // to avoid connection pool exhaustion on Supabase free tier.
+      try {
+        const res = await fetch("/api/me");
+        if (res.ok) {
+          const data = await res.json();
+          setIsVerified(Boolean(data.isVerified));
+          setRole(data.role === "MOH_ADMIN" ? "MOH_ADMIN" : "GUEST_CONFIRMED");
+        }
+      } catch (err) {
+        console.error("[AuthContext] Failed to hydrate profile:", err);
       }
     }
 
@@ -91,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode; }) {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       if (nextSession?.user) {
-        void hydrateProfile(nextSession.user.id);
+        void hydrateProfile();
       } else {
         setRole("GUEST_CONFIRMED");
         setIsVerified(false);

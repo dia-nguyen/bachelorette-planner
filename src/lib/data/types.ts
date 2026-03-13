@@ -58,6 +58,7 @@ export interface Trip {
   location: string;
   description?: string;
   createdByUserId: string;
+  joinCode?: string;
   /** Custom fields to collect for each guest */
   guestFieldSchema?: GuestFieldDef[];
 }
@@ -173,6 +174,19 @@ export interface DashboardData {
   myTasks: Task[];
   allTasksSummary: TasksSummary;
   paymentsSummary: PaymentSummary[];
+}
+
+// ---- Invites ----
+
+export interface Invite {
+  id: string;
+  tripId: string;
+  email: string;
+  token: string;
+  createdBy: string;
+  claimedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
 }
 
 // ---- Context panel ----

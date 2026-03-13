@@ -239,6 +239,55 @@ export function SettingsView() {
           )}
         </div>
       </div>
+
+      {/* Join Code — MOH shares this with guests so they can self-join */}
+      {process.env.NEXT_PUBLIC_DATA_MODE === "supabase" && trip?.joinCode && (
+        <div
+          style={{
+            marginTop: 24,
+            background: "var(--color-bg-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-md)",
+            padding: "var(--space-xl)",
+          }}
+        >
+          <label style={labelStyle}>Trip Join Code</label>
+          <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 14 }}>
+            Share this code with guests. They enter it on the join screen to get access to this trip.
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <code
+              style={{
+                fontSize: 30,
+                fontWeight: 700,
+                letterSpacing: "0.15em",
+                color: "var(--color-accent)",
+                fontFamily: "monospace",
+                background: "var(--color-accent-soft)",
+                padding: "8px 16px",
+                borderRadius: "var(--radius-sm)",
+              }}
+            >
+              {trip.joinCode}
+            </code>
+            <button
+              onClick={() => void navigator.clipboard.writeText(trip.joinCode!)}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--color-border)",
+                background: "var(--color-bg-muted)",
+                cursor: "pointer",
+                fontSize: "var(--font-sm)",
+                fontWeight: 500,
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { updateSession } from "@/lib/supabase/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATH_PREFIXES = ["/login", "/auth/callback", "/invite/"];
+const PUBLIC_PATH_PREFIXES = ["/login", "/auth/callback", "/invite"];
 
 export async function middleware(request: NextRequest) {
   if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase") {

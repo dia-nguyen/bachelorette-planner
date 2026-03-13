@@ -24,25 +24,27 @@ export async function GET(request: Request) {
   if (user) {
     const admin = createAdminClient();
 
+    // Pull name and avatar from Google OAuth metadata
+    const name =
+      user.user_metadata?.full_name ??
+      user.user_metadata?.name ??
+      user.email?.split("@")[0] ??
+      "Guest";
+    const avatarUrl =
+      user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null;
+
     await admin.from("profiles").upsert(
       {
         id: user.id,
         email: user.email ?? "",
-        name: user.user_metadata?.name ?? user.email ?? "Guest",
+        name,
+        avatar_url: avatarUrl,
         is_verified: true,
       },
       { onConflict: "id" },
     );
-
-    await supabase
-      .from("memberships")
-      .update({
-        claimed_at: new Date().toISOString(),
-        invite_status: "ACCEPTED",
-      })
-      .eq("profile_id", user.id)
-      .eq("invite_status", "PENDING");
   }
 
+  // Redirect to the intended destination (preserves invite token redemption on /invite?token=...)
   return NextResponse.redirect(new URL(next, request.url));
 }

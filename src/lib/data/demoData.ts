@@ -1,6 +1,7 @@
 import type {
   BudgetItem,
   ChecklistItem,
+  Invite,
   Membership,
   Photo,
   Poll,
@@ -624,6 +625,7 @@ export interface DemoStore {
   checklistItems: ChecklistItem[];
   polls: Poll[];
   photos: Photo[];
+  invites: Invite[];
 }
 
 export const initialDemoStore: DemoStore = {
@@ -636,4 +638,5 @@ export const initialDemoStore: DemoStore = {
   checklistItems: demoChecklistItems,
   polls: demoPolls,
   photos: demoPhotos,
+  invites: [],
 };

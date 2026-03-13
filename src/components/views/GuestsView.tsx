@@ -317,64 +317,62 @@ function GuestTableRow({
 
 export function GuestsView() {
   const {
-    memberships, users, guestFieldSchema, tripId,
+    memberships, users, guestFieldSchema, tripId, currentRole,
     inviteUser, updateUser, updateMembershipStatus, updateMemberRole,
     addGuestField, removeGuestField, reorderGuestFields,
   } = useApp();
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [showSchemaManager, setShowSchemaManager] = useState(false);
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const handleGuestAction = async (action: "add" | "invite") => {
-    if (!name.trim() || !email.trim()) return;
+  const isAdmin = currentRole === "MOH_ADMIN";
+  const isDemo = process.env.NEXT_PUBLIC_DATA_MODE !== "supabase";
 
+  const handleGenerateLink = async () => {
+    if (!email.trim()) return;
     setInviteError(null);
-    setInviteMessage(null);
+    setInviteLink(null);
+    setCopied(false);
 
-    if (process.env.NEXT_PUBLIC_DATA_MODE === "demo") {
-      inviteUser(name.trim(), email.trim());
-      setInviteMessage(action === "invite" ? "Guest added in demo mode." : "Guest added.");
-      setName("");
+    if (isDemo) {
+      // Demo mode: add guest locally and show a placeholder link
+      inviteUser(email.trim(), email.trim());
+      setInviteLink(`${window.location.origin}/invite?token=demo-token-placeholder`);
       setEmail("");
-      setShowInviteForm(false);
       return;
     }
 
     try {
       setInviteLoading(true);
-      const res = await fetch("/api/invite", {
+      const res = await fetch(`/api/trips/${tripId}/invites`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          tripId,
-          action,
-        }),
+        body: JSON.stringify({ email: email.trim() }),
       });
-
-      const payload = await res.json();
+      const payload = await res.json() as { link?: string; error?: string; };
       if (!res.ok) {
-        setInviteError(payload?.error ?? (action === "invite" ? "Failed to send invite." : "Failed to add guest."));
+        setInviteError(payload.error ?? "Failed to generate invite link.");
         return;
       }
-
-      setInviteMessage(action === "invite" ? "Invite email sent." : "Guest added without invite.");
-      setName("");
+      setInviteLink(payload.link ?? null);
       setEmail("");
-      setShowInviteForm(false);
     } catch {
-      setInviteError(action === "invite" ? "Unable to send invite right now." : "Unable to add guest right now.");
+      setInviteError("Unable to generate invite link right now.");
     } finally {
       setInviteLoading(false);
     }
+  };
 
-    setName("");
-    setEmail("");
+  const handleCopy = () => {
+    if (!inviteLink) return;
+    void navigator.clipboard.writeText(inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
   };
 
   // fixed cols: Guest, Email, Role, RSVP, ...custom, Actions
@@ -392,12 +390,14 @@ export function GuestsView() {
           >
             ⚙️ Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}
           </button>
-          <button
-            onClick={() => setShowInviteForm((v) => !v)}
-            style={{ padding: "8px 20px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 500, cursor: "pointer" }}
-          >
-            + Add Guest
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => { setShowInviteForm((v) => !v); setInviteLink(null); setInviteError(null); }}
+              style={{ padding: "8px 20px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 500, cursor: "pointer" }}
+            >
+              + Invite Guest
+            </button>
+          )}
         </div>
       </div>
 
@@ -405,43 +405,69 @@ export function GuestsView() {
         <SchemaManager schema={guestFieldSchema} onAdd={addGuestField} onRemove={removeGuestField} onReorder={reorderGuestFields} onClose={() => setShowSchemaManager(false)} />
       )}
 
-      {/* Invite form */}
-      {showInviteForm && (
+      {/* Invite link form (admin only) */}
+      {showInviteForm && isAdmin && (
         <div style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "16px 20px" }}>
-          <div className="flex gap-3 flex-wrap items-end">
-            <label style={{ flex: "1 1 160px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-              Name
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Guest name"
-                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") void handleGuestAction("add"); }} autoFocus />
-            </label>
-            <label style={{ flex: "1 1 200px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-              Email
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@example.com"
-                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") void handleGuestAction("add"); }} />
-            </label>
-            <div className="flex gap-2" style={{ paddingBottom: 1 }}>
-              <button
-                onClick={() => void handleGuestAction("add")}
-                disabled={inviteLoading}
-                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", color: "var(--color-text)", fontWeight: 600, cursor: inviteLoading ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: inviteLoading ? 0.7 : 1 }}
-              >
-                {inviteLoading ? "Saving..." : "Add Only"}
-              </button>
-              <button
-                onClick={() => void handleGuestAction("invite")}
-                disabled={inviteLoading}
-                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: inviteLoading ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: inviteLoading ? 0.7 : 1 }}
-              >
-                {inviteLoading ? "Sending..." : "Add + Invite"}
-              </button>
-              <button onClick={() => setShowInviteForm(false)} style={{ padding: "6px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}>Cancel</button>
-            </div>
-          </div>
-          <p style={{ marginTop: 10, color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
-            Add only keeps them admin-managed. Add + Invite sends a magic link so they can claim and edit their own profile.
-          </p>
-          {inviteMessage ? <p style={{ marginTop: 10, color: "#15803d", fontSize: "var(--font-sm)" }}>{inviteMessage}</p> : null}
-          {inviteError ? <p style={{ marginTop: 10, color: "#dc2626", fontSize: "var(--font-sm)" }}>{inviteError}</p> : null}
+          {!inviteLink ? (
+            <>
+              <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 12 }}>Generate an invite link for a specific guest</p>
+              <div className="flex gap-3 flex-wrap items-end">
+                <label style={{ flex: "1 1 220px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
+                  Guest email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="guest@gmail.com"
+                    style={{ ...inputSt, marginTop: 4 }}
+                    onKeyDown={(e) => { if (e.key === "Enter") void handleGenerateLink(); }}
+                    autoFocus
+                  />
+                </label>
+                <div className="flex gap-2" style={{ paddingBottom: 1 }}>
+                  <button
+                    onClick={() => void handleGenerateLink()}
+                    disabled={inviteLoading || !email.trim()}
+                    style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: (inviteLoading || !email.trim()) ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: (inviteLoading || !email.trim()) ? 0.6 : 1 }}
+                  >
+                    {inviteLoading ? "Generating..." : "Generate Link"}
+                  </button>
+                  <button onClick={() => setShowInviteForm(false)} style={{ padding: "6px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}>Cancel</button>
+                </div>
+              </div>
+              <p style={{ marginTop: 10, color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
+                The link is locked to this email address. Only a user signed into Google with that email can redeem it.
+              </p>
+              {inviteError && <p style={{ marginTop: 10, color: "#dc2626", fontSize: "var(--font-sm)" }}>{inviteError}</p>}
+            </>
+          ) : (
+            <>
+              <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 8, color: "#15803d" }}>Invite link ready — copy and share it manually</p>
+              <div className="flex gap-2 items-center flex-wrap">
+                <input
+                  readOnly
+                  value={inviteLink}
+                  style={{ ...inputSt, flex: "1 1 300px", background: "var(--color-bg-muted)", color: "var(--color-text-secondary)", fontFamily: "monospace", fontSize: 12 }}
+                  onFocus={(e) => e.target.select()}
+                />
+                <button
+                  onClick={handleCopy}
+                  style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: copied ? "#15803d" : "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "var(--font-sm)", transition: "background 0.2s" }}
+                >
+                  {copied ? "Copied!" : "Copy Link"}
+                </button>
+                <button
+                  onClick={() => { setInviteLink(null); setShowInviteForm(false); }}
+                  style={{ padding: "6px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}
+                >
+                  Done
+                </button>
+              </div>
+              <p style={{ marginTop: 8, color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
+                Link expires in 30 days. Generating a new link for the same email replaces the previous one.
+              </p>
+            </>
+          )}
         </div>
       )}
 

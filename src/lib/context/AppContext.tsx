@@ -25,7 +25,6 @@ import {
 } from "@/lib/data";
 import { computeDashboard } from "@/lib/domain";
 import {
-  createClient as createSupabaseClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
 import {
@@ -43,6 +42,22 @@ import { v4 as uuid } from "uuid";
 const DEMO_TRIP_ID = "trip1";
 const DEMO_USER_ID = "u1"; // Sarah Kim (MOH_ADMIN)
 const repo = repository;
+
+// ---- Supabase row → domain object mapper ----
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapTripRow(row: any): Trip {
+  return {
+    id: row.id,
+    name: row.name,
+    startAt: String(row.start_at ?? ""),
+    endAt: String(row.end_at ?? ""),
+    location: row.location ?? "",
+    description: row.description ?? "",
+    createdByUserId: row.created_by,
+    joinCode: row.join_code ?? undefined,
+    guestFieldSchema: (row.guest_field_schema ?? []) as GuestFieldDef[],
+  };
+}
 
 interface AppContextValue {
   // Current session
@@ -119,6 +134,13 @@ interface AppContextValue {
   // Unified "Plan Activity" — creates any combo of event/task/budget, all pre-linked
   planActivity: (input: PlanActivityInput) => void;
 
+  // Multi-trip
+  availableTrips: Trip[];
+  switchTrip: (tripId: string) => void;
+  createTrip: (data: { name: string; location: string; startAt: string; endAt: string; description?: string; }) => Promise<void>;
+  isLoadingTrips: boolean;
+  isLoadingData: boolean;
+
   // Data management
   clearAllData: () => void;
   resetDemoData: () => void;
@@ -128,6 +150,8 @@ interface AppContextValue {
   // Refresh
   refresh: () => void;
 }
+
+const LAST_TRIP_KEY = "bp-last-trip-id";
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -140,7 +164,15 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const [currentUserId] = useState<string>(DEMO_USER_ID);
   const [tick, setTick] = useState(0);
 
-  const [supabaseTripId, setSupabaseTripId] = useState<string | null>(null);
+  // Multi-trip state
+  const [availableTrips, setAvailableTrips] = useState<Trip[]>([]);
+  const [isLoadingTrips, setIsLoadingTrips] = useState(isSupabaseMode);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [activeTripId, setActiveTripId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(LAST_TRIP_KEY);
+  });
+
   const [supabaseTrip, setSupabaseTrip] = useState<Trip | null>(null);
   const [supabaseUsers, setSupabaseUsers] = useState<User[]>([]);
   const [supabaseMemberships, setSupabaseMemberships] = useState<Membership[]>([]);
@@ -153,41 +185,59 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
-  // Subscribe to repository changes
+  // Subscribe to repository changes (demo mode only)
   useEffect(() => {
     if (isSupabaseMode) return;
     return subscribe(refresh);
   }, [isSupabaseMode, refresh]);
 
+  // Effect 1: Load all trips the user belongs to or created (runs when user changes)
   useEffect(() => {
-    if (!isSupabaseMode || !user?.id) return;
+    if (!isSupabaseMode || !user?.id) {
+      if (isSupabaseMode) setIsLoadingTrips(false);
+      return;
+    }
 
     let isCancelled = false;
+    setIsLoadingTrips(true);
 
     const run = async () => {
-      const supabase = createSupabaseClient();
+      try {
+        const res = await fetch("/api/trips");
+        if (isCancelled) return;
+        if (!res.ok) throw new Error(`/api/trips returned ${res.status}`);
+        const payload = (await res.json()) as { trips?: unknown[] };
+        if (isCancelled) return;
 
-      const [myMembership, createdTrip] = await Promise.all([
-        supabase
-          .from("memberships")
-          .select("trip_id")
-          .eq("profile_id", user.id)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from("trips")
-          .select("id")
-          .eq("created_by", user.id)
-          .limit(1)
-          .maybeSingle(),
-      ]);
+        const allTrips: Trip[] = (payload.trips ?? []).map(mapTripRow);
+        const storedId = typeof window !== "undefined"
+          ? localStorage.getItem(LAST_TRIP_KEY)
+          : null;
+        const chosenId = (storedId && allTrips.some((t) => t.id === storedId))
+          ? storedId
+          : (allTrips[0]?.id ?? null);
 
-      if (isCancelled) return;
+        if (!isCancelled) {
+          setAvailableTrips(allTrips);
+          setActiveTripId(chosenId);
+        }
+      } catch (err) {
+        console.error("[AppContext] Failed to load trips:", err);
+      } finally {
+        if (!isCancelled) setIsLoadingTrips(false);
+      }
+    };
 
-      const activeTripId = myMembership.data?.trip_id ?? createdTrip.data?.id ?? null;
-      setSupabaseTripId(activeTripId);
+    void run();
 
-      if (!activeTripId) {
+    return () => { isCancelled = true; };
+  }, [isSupabaseMode, user?.id]);
+
+  // Effect 2: Load entity data for the currently active trip
+  useEffect(() => {
+    if (!isSupabaseMode || !user?.id || !activeTripId) {
+      setIsLoadingData(false);
+      if (isSupabaseMode && !activeTripId) {
         setSupabaseTrip(null);
         setSupabaseUsers([]);
         setSupabaseMemberships([]);
@@ -197,67 +247,50 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         setSupabaseChecklistItems([]);
         setSupabasePolls([]);
         setSupabasePhotos([]);
-        return;
       }
+      return;
+    }
 
-      const [tripRes, membershipsRes, eventsRes, tasksRes, budgetRes, checklistRes, pollsRes, photosRes] =
-        await Promise.all([
-          supabase.from("trips").select("*").eq("id", activeTripId).maybeSingle(),
-          supabase.from("memberships").select("*").eq("trip_id", activeTripId),
-          supabase.from("events").select("*").eq("trip_id", activeTripId),
-          supabase.from("tasks").select("*").eq("trip_id", activeTripId),
-          supabase.from("budget_items").select("*").eq("trip_id", activeTripId),
-          supabase.from("checklist_items").select("*").eq("trip_id", activeTripId),
-          supabase.from("polls").select("*").eq("trip_id", activeTripId),
-          supabase.from("photos").select("*").eq("trip_id", activeTripId),
-        ]);
+    let isCancelled = false;
+    setIsLoadingData(true);
 
-      if (isCancelled) return;
-
-      if (tripRes.data) {
-        setSupabaseTrip({
-          id: tripRes.data.id,
-          name: tripRes.data.name,
-          startAt: String(tripRes.data.start_at),
-          endAt: String(tripRes.data.end_at),
-          location: tripRes.data.location,
-          description: tripRes.data.description ?? "",
-          createdByUserId: tripRes.data.created_by,
-          guestFieldSchema: (tripRes.data.guest_field_schema ?? []) as GuestFieldDef[],
-        });
-      }
-
-      const mappedMemberships: Membership[] = (membershipsRes.data ?? []).map((m) => ({
-        tripId: m.trip_id,
-        userId: m.profile_id,
-        role: m.role,
-        inviteStatus: m.invite_status,
-      }));
-
-      if (
-        tripRes.data?.created_by &&
-        !mappedMemberships.some((m) => m.userId === tripRes.data.created_by)
-      ) {
-        mappedMemberships.unshift({
-          tripId: activeTripId,
-          userId: tripRes.data.created_by,
-          role: "MOH_ADMIN",
-          inviteStatus: "ACCEPTED",
-        });
-      }
-
-      setSupabaseMemberships(mappedMemberships);
-
-      const profileIds = Array.from(new Set(mappedMemberships.map((m) => m.userId)));
-      if (profileIds.length > 0) {
-        const profilesRes = await supabase
-          .from("profiles")
-          .select("id,name,email,avatar_color,custom_fields")
-          .in("id", profileIds);
-
+    const run = async () => {
+      try {
+        const res = await fetch(`/api/trips/${activeTripId}/all`);
+        if (isCancelled) return;
+        if (!res.ok) throw new Error(`/api/trips/${activeTripId}/all returned ${res.status}`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (await res.json()) as Record<string, any>;
         if (isCancelled) return;
 
-        const mappedUsers: User[] = (profilesRes.data ?? []).map((p) => ({
+        if (data.trip) {
+          setSupabaseTrip(mapTripRow(data.trip));
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mappedMemberships: Membership[] = (data.memberships ?? []).map((m: any) => ({
+          tripId: m.trip_id,
+          userId: m.profile_id,
+          role: m.role,
+          inviteStatus: m.invite_status,
+        }));
+
+        if (
+          data.trip?.created_by &&
+          !mappedMemberships.some((m) => m.userId === data.trip.created_by)
+        ) {
+          mappedMemberships.unshift({
+            tripId: activeTripId,
+            userId: data.trip.created_by,
+            role: "MOH_ADMIN",
+            inviteStatus: "ACCEPTED",
+          });
+        }
+
+        setSupabaseMemberships(mappedMemberships);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mappedUsers: User[] = (data.profiles ?? []).map((p: any) => ({
           id: p.id,
           name: p.name,
           email: p.email,
@@ -279,105 +312,157 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         }
 
         setSupabaseUsers(mappedUsers);
-      } else {
-        setSupabaseUsers([]);
+
+        setSupabaseEvents(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.events ?? []).map((e: any) => ({
+            id: e.id,
+            tripId: e.trip_id,
+            title: e.title,
+            startAt: e.start_at,
+            endAt: e.end_at ?? undefined,
+            location: e.location,
+            description: e.description ?? "",
+            status: e.status,
+            provider: e.provider ?? undefined,
+            confirmationCode: e.confirmation_code ?? undefined,
+            attendeeUserIds: (e.attendee_user_ids ?? []) as string[],
+          })),
+        );
+
+        setSupabaseTasks(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.tasks ?? []).map((t: any) => ({
+            id: t.id,
+            tripId: t.trip_id,
+            title: t.title,
+            description: t.description ?? "",
+            status: t.status,
+            priority: t.priority,
+            dueAt: t.due_at,
+            assigneeUserIds: (t.assignee_user_ids ?? []) as string[],
+            relatedEventId: t.related_event_id,
+            relatedBudgetItemId: t.related_budget_item_id,
+          })),
+        );
+
+        setSupabaseBudgetItems(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.budgetItems ?? []).map((b: any) => ({
+            id: b.id,
+            tripId: b.trip_id,
+            title: b.title,
+            category: b.category,
+            plannedAmount: Number(b.planned_amount ?? 0),
+            actualAmount: Number(b.actual_amount ?? 0),
+            currency: b.currency ?? "USD",
+            responsibleUserId: b.responsible_user_id,
+            paidByUserId: b.paid_by_user_id,
+            status: b.status,
+            relatedEventId: b.related_event_id,
+            relatedTaskId: b.related_task_id,
+            notes: b.notes ?? "",
+            costMode: b.cost_mode ?? undefined,
+            splitType: b.split_type ?? undefined,
+            plannedSplits: (b.planned_splits ?? undefined) as Record<string, number> | undefined,
+            actualSplits: (b.actual_splits ?? undefined) as Record<string, number> | undefined,
+            splitAttendeeUserIds: (b.split_attendee_user_ids ?? []) as string[],
+          })),
+        );
+
+        setSupabaseChecklistItems(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.checklistItems ?? []).map((c: any) => ({
+            id: c.id,
+            tripId: c.trip_id,
+            title: c.title,
+            isChecked: c.is_checked,
+            assigneeUserId: c.assignee_user_id,
+            category: c.category,
+          })),
+        );
+
+        setSupabasePolls(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.polls ?? []).map((p: any) => ({
+            id: p.id,
+            tripId: p.trip_id,
+            question: p.question,
+            createdByUserId: p.created_by_user_id,
+            options: (p.options ?? []) as Poll["options"],
+            isClosed: p.is_closed,
+          })),
+        );
+
+        setSupabasePhotos(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.photos ?? []).map((p: any) => ({
+            id: p.id,
+            tripId: p.trip_id,
+            url: p.url,
+            caption: p.caption ?? "",
+            uploadedByUserId: p.uploaded_by_user_id,
+            relatedEventId: p.related_event_id,
+            createdAt: p.created_at,
+          })),
+        );
+      } catch (err) {
+        console.error("[AppContext] Failed to load trip data:", err);
+      } finally {
+        if (!isCancelled) setIsLoadingData(false);
       }
-
-      setSupabaseEvents(
-        (eventsRes.data ?? []).map((e) => ({
-          id: e.id,
-          tripId: e.trip_id,
-          title: e.title,
-          startAt: e.start_at,
-          endAt: e.end_at ?? undefined,
-          location: e.location,
-          description: e.description ?? "",
-          status: e.status,
-          provider: e.provider ?? undefined,
-          confirmationCode: e.confirmation_code ?? undefined,
-          attendeeUserIds: (e.attendee_user_ids ?? []) as string[],
-        })),
-      );
-
-      setSupabaseTasks(
-        (tasksRes.data ?? []).map((t) => ({
-          id: t.id,
-          tripId: t.trip_id,
-          title: t.title,
-          description: t.description ?? "",
-          status: t.status,
-          priority: t.priority,
-          dueAt: t.due_at,
-          assigneeUserIds: (t.assignee_user_ids ?? []) as string[],
-          relatedEventId: t.related_event_id,
-          relatedBudgetItemId: t.related_budget_item_id,
-        })),
-      );
-
-      setSupabaseBudgetItems(
-        (budgetRes.data ?? []).map((b) => ({
-          id: b.id,
-          tripId: b.trip_id,
-          title: b.title,
-          category: b.category,
-          plannedAmount: Number(b.planned_amount ?? 0),
-          actualAmount: Number(b.actual_amount ?? 0),
-          currency: b.currency ?? "USD",
-          responsibleUserId: b.responsible_user_id,
-          paidByUserId: b.paid_by_user_id,
-          status: b.status,
-          relatedEventId: b.related_event_id,
-          relatedTaskId: b.related_task_id,
-          notes: b.notes ?? "",
-          costMode: b.cost_mode ?? undefined,
-          splitType: b.split_type ?? undefined,
-          plannedSplits: (b.planned_splits ?? undefined) as Record<string, number> | undefined,
-          actualSplits: (b.actual_splits ?? undefined) as Record<string, number> | undefined,
-          splitAttendeeUserIds: (b.split_attendee_user_ids ?? []) as string[],
-        })),
-      );
-
-      setSupabaseChecklistItems(
-        (checklistRes.data ?? []).map((c) => ({
-          id: c.id,
-          tripId: c.trip_id,
-          title: c.title,
-          isChecked: c.is_checked,
-          assigneeUserId: c.assignee_user_id,
-          category: c.category,
-        })),
-      );
-
-      setSupabasePolls(
-        (pollsRes.data ?? []).map((p) => ({
-          id: p.id,
-          tripId: p.trip_id,
-          question: p.question,
-          createdByUserId: p.created_by_user_id,
-          options: (p.options ?? []) as Poll["options"],
-          isClosed: p.is_closed,
-        })),
-      );
-
-      setSupabasePhotos(
-        (photosRes.data ?? []).map((p) => ({
-          id: p.id,
-          tripId: p.trip_id,
-          url: p.url,
-          caption: p.caption ?? "",
-          uploadedByUserId: p.uploaded_by_user_id,
-          relatedEventId: p.related_event_id,
-          createdAt: p.created_at,
-        })),
-      );
     };
 
     void run();
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [isSupabaseMode, user, tick]);
+    return () => { isCancelled = true; };
+  }, [isSupabaseMode, activeTripId, user?.id, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Switch the active trip and persist the choice
+  const switchTrip = useCallback((newTripId: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(LAST_TRIP_KEY, newTripId);
+    }
+    setActiveTripId(newTripId);
+    setTick((t) => t + 1);
+  }, []);
+
+  // Create a new trip and immediately switch to it
+  const createTrip = useCallback(async (data: { name: string; location: string; startAt: string; endAt: string; description?: string; }) => {
+    if (!isSupabaseMode) {
+      // Demo mode: use repository
+      const { v4: uuid } = await import("uuid");
+      const id = uuid();
+      repo.createTrip({ id, ...data, createdByUserId: DEMO_USER_ID, guestFieldSchema: [] });
+      repo.addMembership({ tripId: id, userId: DEMO_USER_ID, role: "MOH_ADMIN", inviteStatus: "ACCEPTED" });
+      refresh();
+      return;
+    }
+
+    const res = await fetch("/api/trips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    const payload = (await res.json()) as { trip?: { id: string; }; error?: string; };
+    if (!res.ok || !payload.trip) {
+      throw new Error(payload.error ?? "Failed to create trip.");
+    }
+
+    const newId = payload.trip.id;
+    if (typeof window !== "undefined") {
+      localStorage.setItem(LAST_TRIP_KEY, newId);
+    }
+    setActiveTripId(newId);
+    // Re-trigger the trips list load
+    setAvailableTrips((prev) => {
+      // Will be refreshed by effect 2; add optimistically so switcher updates immediately
+      const tripRow: Trip = { id: newId, ...data, createdByUserId: user?.id ?? "", guestFieldSchema: [] };
+      return [tripRow, ...prev];
+    });
+    setTick((t) => t + 1);
+  }, [isSupabaseMode, refresh, user?.id]);
 
   // Panel state
   const [panel, setPanel] = useState<PanelState>({ type: null, id: null });
@@ -424,7 +509,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     return repo.getPhotos(tripId);
   }, [tick, tripId]);
 
-  const effectiveTripId = isSupabaseMode ? supabaseTripId ?? DEMO_TRIP_ID : tripId;
+  const effectiveTripId = isSupabaseMode ? activeTripId ?? DEMO_TRIP_ID : tripId;
   const effectiveCurrentUserId = isSupabaseMode ? user?.id ?? DEMO_USER_ID : currentUserId;
 
   const trip = isSupabaseMode ? supabaseTrip : (repo.getTrip(tripId) ?? null);
@@ -781,6 +866,11 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       }
     },
     refresh,
+    availableTrips,
+    switchTrip,
+    createTrip,
+    isLoadingTrips,
+    isLoadingData,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

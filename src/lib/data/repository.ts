@@ -2,6 +2,7 @@ import type {
   BudgetItem,
   ChecklistItem,
   GuestFieldDef,
+  Invite,
   Membership,
   Photo,
   Poll,
@@ -74,4 +75,10 @@ export interface Repository {
   getPhotos(tripId: string): Photo[];
   addPhoto(photo: Photo): void;
   deletePhoto(photoId: string): void;
+
+  // Invites
+  getInvites(tripId: string): Invite[];
+  addInvite(invite: Invite): void;
+  getInviteByToken(token: string): Invite | undefined;
+  claimInvite(token: string, claimedAt: string): void;
 }

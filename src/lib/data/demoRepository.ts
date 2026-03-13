@@ -4,6 +4,7 @@ import type {
   BudgetItem,
   ChecklistItem,
   GuestFieldDef,
+  Invite,
   Membership,
   Photo,
   Poll,
@@ -25,6 +26,7 @@ function loadStore(): DemoStore {
       if (!parsed.checklistItems) parsed.checklistItems = [];
       if (!parsed.polls) parsed.polls = [];
       if (!parsed.photos) parsed.photos = [];
+      if (!parsed.invites) parsed.invites = [];
       return parsed;
     }
   } catch {
@@ -304,5 +306,31 @@ export const demoRepository: Repository = {
     const s = getStore();
     s.photos = s.photos.filter((p) => p.id !== photoId);
     notify();
+  },
+
+  // Invites
+  getInvites(tripId: string): Invite[] {
+    return (getStore().invites ?? []).filter((i) => i.tripId === tripId);
+  },
+  addInvite(invite: Invite): void {
+    const s = getStore();
+    if (!s.invites) s.invites = [];
+    // Replace any existing unclaimed invite for this email+trip
+    s.invites = s.invites.filter(
+      (i) => !(i.tripId === invite.tripId && i.email === invite.email),
+    );
+    s.invites.push(invite);
+    notify();
+  },
+  getInviteByToken(token: string): Invite | undefined {
+    return (getStore().invites ?? []).find((i) => i.token === token);
+  },
+  claimInvite(token: string, claimedAt: string): void {
+    const s = getStore();
+    const idx = (s.invites ?? []).findIndex((i) => i.token === token);
+    if (idx !== -1) {
+      s.invites[idx] = { ...s.invites[idx], claimedAt };
+      notify();
+    }
   },
 };

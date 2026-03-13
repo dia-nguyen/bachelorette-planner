@@ -2,36 +2,61 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-interface InviteRequestBody {
-  email: string;
-  name: string;
-  tripId: string;
-  action?: "add" | "invite";
-}
-
-export async function POST(req: Request) {
+/**
+ * GET /api/invite?token=xxx
+ * Public — returns invite metadata (trip name, inviter) so the
+ * invite page can show a preview before the user signs in.
+ */
+export async function GET(req: Request) {
   if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase") {
     return NextResponse.json(
-      { error: "Invites are disabled in demo mode." },
+      { error: "Invites disabled in demo mode." },
       { status: 400 },
     );
   }
 
-  let body: InviteRequestBody;
-  try {
-    body = (await req.json()) as InviteRequestBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  const token = new URL(req.url).searchParams.get("token");
+  if (!token) {
+    return NextResponse.json({ error: "token is required." }, { status: 400 });
   }
 
-  const email = body.email?.trim().toLowerCase();
-  const name = body.name?.trim();
-  const tripId = body.tripId?.trim();
-  const action = body.action === "add" ? "add" : "invite";
+  const admin = createAdminClient();
 
-  if (!email || !name || !tripId) {
+  const { data: invite, error } = await admin
+    .from("invites")
+    .select("id, email, trip_id, claimed_at, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (error || !invite) {
+    return NextResponse.json({ error: "Invite not found." }, { status: 404 });
+  }
+
+  // Return just enough info to render the invite page without leaking the token
+  const { data: trip } = await admin
+    .from("trips")
+    .select("id, name, location, start_at")
+    .eq("id", invite.trip_id)
+    .maybeSingle();
+
+  return NextResponse.json({
+    email: invite.email,
+    claimed: invite.claimed_at !== null,
+    expired: new Date(invite.expires_at) < new Date(),
+    trip: trip ?? null,
+  });
+}
+
+/**
+ * POST /api/invite
+ * Authenticated. Body: { token }
+ * Validates the token, checks the signed-in user's email matches the invite,
+ * creates a GUEST_CONFIRMED membership, and marks the invite as claimed.
+ */
+export async function POST(req: Request) {
+  if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase") {
     return NextResponse.json(
-      { error: "email, name, and tripId are required." },
+      { error: "Invites disabled in demo mode." },
       { status: 400 },
     );
   }
@@ -45,103 +70,95 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const membership = await supabase
-    .from("memberships")
-    .select("role")
-    .eq("trip_id", tripId)
-    .eq("profile_id", user.id)
-    .maybeSingle();
+  let body: { token: string };
+  try {
+    body = (await req.json()) as { token: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
 
-  if (membership.error || membership.data?.role !== "MOH_ADMIN") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  const token = body.token?.trim();
+  if (!token) {
+    return NextResponse.json({ error: "token is required." }, { status: 400 });
   }
 
   const admin = createAdminClient();
 
-  const { data: existingProfile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("email", email)
+  const { data: invite, error: inviteError } = await admin
+    .from("invites")
+    .select("*")
+    .eq("token", token)
     .maybeSingle();
 
-  let profileId = existingProfile?.id;
-
-  if (!profileId) {
-    const { data: createdUser, error: createUserError } =
-      await admin.auth.admin.createUser({
-        email,
-        email_confirm: false,
-        user_metadata: { name },
-      });
-
-    if (createUserError || !createdUser.user) {
-      return NextResponse.json(
-        { error: createUserError?.message || "Failed to create guest user." },
-        { status: 400 },
-      );
-    }
-
-    profileId = createdUser.user.id;
-
-    const { error: profileError } = await admin.from("profiles").upsert(
-      {
-        id: profileId,
-        email,
-        name,
-        is_verified: false,
-      },
-      { onConflict: "id" },
-    );
-
-    if (profileError) {
-      return NextResponse.json(
-        { error: profileError.message || "Failed to create guest profile." },
-        { status: 400 },
-      );
-    }
+  if (inviteError || !invite) {
+    return NextResponse.json({ error: "Invite not found." }, { status: 404 });
   }
 
-  const { error: membershipUpsertError } = await admin
-    .from("memberships")
-    .upsert(
-      {
-        trip_id: tripId,
-        profile_id: profileId,
-        role: "GUEST_CONFIRMED",
-        invite_status: action === "invite" ? "PENDING" : "ACCEPTED",
-        invited_at: action === "invite" ? new Date().toISOString() : null,
-      },
-      { onConflict: "trip_id,profile_id" },
+  if (invite.claimed_at !== null) {
+    return NextResponse.json(
+      { error: "This invite has already been claimed." },
+      { status: 409 },
     );
+  }
 
-  if (membershipUpsertError) {
+  if (new Date(invite.expires_at) < new Date()) {
+    return NextResponse.json(
+      { error: "This invite has expired." },
+      { status: 410 },
+    );
+  }
+
+  // Email must match — case-insensitive comparison
+  const userEmail = (user.email ?? "").toLowerCase();
+  if (userEmail !== invite.email.toLowerCase()) {
     return NextResponse.json(
       {
-        error: membershipUpsertError.message || "Failed to add guest to trip.",
+        error: `This invite was sent to ${invite.email}. You are signed in as ${user.email}. Please sign in with the correct Google account.`,
       },
-      { status: 400 },
+      { status: 403 },
     );
   }
 
-  if (action === "invite") {
-    const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        redirectTo: `${new URL(req.url).origin}/auth/callback`,
-        data: {
-          invited_trip_id: tripId,
-          invited_name: name,
-        },
-      },
-    );
+  // Ensure the user has a profile row (auto-created on first login, but guard anyway)
+  await admin.from("profiles").upsert(
+    {
+      id: user.id,
+      email: user.email ?? "",
+      name:
+        user.user_metadata?.full_name ??
+        user.user_metadata?.name ??
+        user.email?.split("@")[0] ??
+        "Guest",
+      avatar_url:
+        user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null,
+      is_verified: true,
+    },
+    { onConflict: "id" },
+  );
 
-    if (inviteError) {
-      return NextResponse.json(
-        { error: inviteError.message || "Failed to send invite." },
-        { status: 400 },
-      );
-    }
+  // Create (or update) membership
+  const { error: memberError } = await admin.from("memberships").upsert(
+    {
+      trip_id: invite.trip_id,
+      profile_id: user.id,
+      role: "GUEST_CONFIRMED",
+      invite_status: "ACCEPTED",
+    },
+    { onConflict: "trip_id,profile_id" },
+  );
+
+  if (memberError) {
+    return NextResponse.json(
+      { error: memberError.message || "Failed to join trip." },
+      { status: 500 },
+    );
   }
 
-  return NextResponse.json({ ok: true, action });
+  // Mark invite as claimed
+  await admin
+    .from("invites")
+    .update({ claimed_at: new Date().toISOString() })
+    .eq("id", invite.id);
+
+  return NextResponse.json({ ok: true, tripId: invite.trip_id });
 }

@@ -8,12 +8,128 @@ import { Badge, eventStatusVariant } from "@/components/ui";
 import { BudgetView, DashboardView, EventsView, GuestsView, SettingsView, TasksView } from "@/components/views";
 import { PlanActivityForm } from "@/components/views/PlanActivityForm";
 import { useApp } from "@/lib/context";
-import { useState } from "react";
+import { useAuth } from "@/lib/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useEffect, useState } from "react";
+
+function CreateTripModal({ onClose }: { onClose: () => void; }) {
+  const { createTrip } = useApp();
+  const [name, setName] = useState("");
+  const [location, setLocation] = useState("");
+  const [startAt, setStartAt] = useState("");
+  const [endAt, setEndAt] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !startAt || !endAt) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createTrip({ name: name.trim(), location: location.trim(), startAt, endAt });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create trip.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputSt: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    marginTop: 4,
+    padding: "8px 12px",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--color-border)",
+    fontSize: "var(--font-sm)",
+    background: "var(--color-bg-surface)",
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 300,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(480px, 90vw)",
+          background: "var(--color-bg-surface)",
+          borderRadius: "var(--radius-lg)",
+          padding: "28px 32px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+        }}
+      >
+        <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+          <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>New Trip</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, color: "var(--color-text-secondary)", lineHeight: 1 }}>×</button>
+        </div>
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+          <label style={{ fontSize: "var(--font-sm)", fontWeight: 600 }}>
+            Trip name *
+            <input style={inputSt} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Emma's Bachelorette" required autoFocus />
+          </label>
+          <label style={{ fontSize: "var(--font-sm)", fontWeight: 600 }}>
+            Location
+            <input style={inputSt} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Nashville, TN" />
+          </label>
+          <div className="flex gap-3">
+            <label style={{ flex: 1, fontSize: "var(--font-sm)", fontWeight: 600 }}>
+              Start date *
+              <input type="date" style={inputSt} value={startAt} onChange={(e) => setStartAt(e.target.value)} required />
+            </label>
+            <label style={{ flex: 1, fontSize: "var(--font-sm)", fontWeight: 600 }}>
+              End date *
+              <input type="date" style={inputSt} value={endAt} onChange={(e) => setEndAt(e.target.value)} required />
+            </label>
+          </div>
+          {error && <p style={{ color: "#dc2626", fontSize: "var(--font-sm)" }}>{error}</p>}
+          <div className="flex gap-2 justify-end" style={{ marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={{ padding: "8px 18px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}>Cancel</button>
+            <button type="submit" disabled={saving || !name.trim() || !startAt || !endAt} style={{ padding: "8px 22px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: (saving || !name.trim()) ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: (saving || !name.trim()) ? 0.6 : 1 }}>
+              {saving ? "Creating..." : "Create Trip"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export function AppShell() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showPlanForm, setShowPlanForm] = useState(false);
+  const [showCreateTrip, setShowCreateTrip] = useState(false);
   const app = useApp();
+  const auth = useAuth();
+  const router = useRouter();
+
+  // Redirect new users (no trips yet) to the onboarding page.
+  // Wait for BOTH auth AND trips to finish loading — otherwise this fires
+  // on every refresh before the session has hydrated, sending logged-in
+  // users with trips back to onboarding.
+  useEffect(() => {
+    if (
+      !auth.loading &&
+      !app.isLoadingTrips &&
+      !app.isLoadingData &&
+      app.availableTrips.length === 0 &&
+      process.env.NEXT_PUBLIC_DATA_MODE === "supabase"
+    ) {
+      router.replace("/onboarding");
+    }
+  }, [auth.loading, app.isLoadingTrips, app.isLoadingData, app.availableTrips.length, router]);
 
   const tripName = app.trip?.name ?? "Trip Planner";
 
@@ -142,7 +258,7 @@ export function AppShell() {
   return (
     <div className="flex h-screen" style={{ background: "var(--color-accent-soft)" }}>
       {/* Sidebar */}
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onNewTrip={() => setShowCreateTrip(true)} />
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -159,12 +275,18 @@ export function AppShell() {
           className="flex-1 overflow-y-auto p-3 md:p-6"
           style={{ background: "var(--color-bg-surface)" }}
         >
-          {activeTab === "dashboard" && <DashboardView />}
-          {activeTab === "events" && <EventsView />}
-          {activeTab === "guests" && <GuestsView />}
-          {activeTab === "budget" && <BudgetView />}
-          {activeTab === "tasks" && <TasksView />}
-          {activeTab === "settings" && <SettingsView />}
+          {(app.isLoadingTrips || app.isLoadingData) ? (
+            <div className="flex items-center justify-center" style={{ height: "60vh", color: "var(--color-text-secondary)", fontSize: "var(--font-md)" }}>Loading…</div>
+          ) : (
+            <>
+              {activeTab === "dashboard" && <DashboardView />}
+              {activeTab === "events" && <EventsView />}
+              {activeTab === "guests" && <GuestsView />}
+              {activeTab === "budget" && <BudgetView />}
+              {activeTab === "tasks" && <TasksView />}
+              {activeTab === "settings" && <SettingsView />}
+            </>
+          )}
         </main>
       </div>
 
@@ -177,6 +299,9 @@ export function AppShell() {
       >
         {renderPanelContent()}
       </ContextPanel>
+
+      {/* Create Trip modal */}
+      {showCreateTrip && <CreateTripModal onClose={() => setShowCreateTrip(false)} />}
 
       {/* Plan Activity modal */}
       {showPlanForm && (
