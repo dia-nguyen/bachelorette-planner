@@ -5,12 +5,12 @@ import { BudgetDetail } from "@/components/panels/BudgetDetail";
 import { EventDetail } from "@/components/panels/EventDetail";
 import { TaskDetail } from "@/components/panels/TaskDetail";
 import { Badge, eventStatusVariant } from "@/components/ui";
-import { BudgetView, DashboardView, EventsView, GuestsView, SettingsView, TasksView } from "@/components/views";
+import { BudgetView, DashboardView, EventsView, GuestsView, MoodboardView, SettingsView, TasksView } from "@/components/views";
 import { PlanActivityForm } from "@/components/views/PlanActivityForm";
 import { useApp } from "@/lib/context";
 import { useAuth } from "@/lib/context/AuthContext";
-import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 function CreateTripModal({ onClose }: { onClose: () => void; }) {
   const { createTrip } = useApp();
@@ -108,12 +108,25 @@ function CreateTripModal({ onClose }: { onClose: () => void; }) {
 }
 
 export function AppShell() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialTab = searchParams.get("tab") ?? "dashboard";
+  const [activeTab, setActiveTabState] = useState(initialTab);
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const app = useApp();
   const auth = useAuth();
-  const router = useRouter();
+
+  const setActiveTab = useCallback((tab: string) => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    if (tab === "dashboard") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", tab);
+    }
+    router.replace(url.pathname + url.search, { scroll: false });
+  }, [router]);
 
   // Redirect new users (no trips yet) to the onboarding page.
   // Wait for BOTH auth AND trips to finish loading — otherwise this fires
@@ -139,6 +152,7 @@ export function AppShell() {
     guests: "Guests",
     budget: "Budget",
     tasks: "Tasks",
+    moodboard: "Moodboard",
     settings: "Settings",
   };
 
@@ -272,7 +286,7 @@ export function AppShell() {
         />
 
         <main
-          className="flex-1 overflow-y-auto p-3 md:p-6"
+          className={`flex-1 overflow-y-auto ${activeTab === "moodboard" ? "p-0" : "p-3 md:p-6"}`}
           style={{ background: "var(--color-bg-surface)" }}
         >
           {(app.isLoadingTrips || app.isLoadingData) ? (
@@ -284,6 +298,7 @@ export function AppShell() {
               {activeTab === "guests" && <GuestsView />}
               {activeTab === "budget" && <BudgetView />}
               {activeTab === "tasks" && <TasksView />}
+              {activeTab === "moodboard" && <MoodboardView />}
               {activeTab === "settings" && <SettingsView />}
             </>
           )}

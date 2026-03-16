@@ -6,7 +6,21 @@ interface AvatarProps {
   size?: number;
 }
 
-export function Avatar({ name, color = "#A78BFA", size = 28 }: AvatarProps) {
+const AVATAR_PALETTE = [
+  "#A78BFA", "#F472B6", "#34D399", "#60A5FA", "#FBBF24",
+  "#F87171", "#818CF8", "#2DD4BF", "#FB923C", "#C084FC",
+];
+
+function hashName(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+export function Avatar({ name, color, size = 28 }: AvatarProps) {
+  const resolvedColor = color ?? AVATAR_PALETTE[hashName(name) % AVATAR_PALETTE.length];
   const initials = name
     .split(" ")
     .map((w) => w[0])
@@ -24,7 +38,7 @@ export function Avatar({ name, color = "#A78BFA", size = 28 }: AvatarProps) {
         width: size,
         height: size,
         borderRadius: "50%",
-        background: color,
+        background: resolvedColor,
         color: "#fff",
         fontSize: size * 0.4,
         fontWeight: 600,

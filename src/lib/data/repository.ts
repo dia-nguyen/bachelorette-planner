@@ -4,6 +4,7 @@ import type {
   GuestFieldDef,
   Invite,
   Membership,
+  MoodboardNote,
   Photo,
   Poll,
   Task,
@@ -81,4 +82,9 @@ export interface Repository {
   addInvite(invite: Invite): void;
   getInviteByToken(token: string): Invite | undefined;
   claimInvite(token: string, claimedAt: string): void;
+  // Moodboard Notes
+  getMoodboardNotes(tripId: string): MoodboardNote[];
+  addMoodboardNote(note: MoodboardNote): void;
+  updateMoodboardNote(noteId: string, patch: Partial<MoodboardNote>): void;
+  deleteMoodboardNote(noteId: string): void;
 }

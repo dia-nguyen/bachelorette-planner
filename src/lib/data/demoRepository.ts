@@ -4,8 +4,8 @@ import type {
   BudgetItem,
   ChecklistItem,
   GuestFieldDef,
-  Invite,
   Membership,
+  MoodboardNote,
   Photo,
   Poll,
   Task,
@@ -26,7 +26,7 @@ function loadStore(): DemoStore {
       if (!parsed.checklistItems) parsed.checklistItems = [];
       if (!parsed.polls) parsed.polls = [];
       if (!parsed.photos) parsed.photos = [];
-      if (!parsed.invites) parsed.invites = [];
+      if (!parsed.moodboardNotes) parsed.moodboardNotes = [];
       return parsed;
     }
   } catch {
@@ -84,6 +84,7 @@ export function clearAllData(): void {
   s.checklistItems = [];
   s.polls = [];
   s.photos = [];
+  s.moodboardNotes = [];
   persist();
   notify();
 }
@@ -308,29 +309,25 @@ export const demoRepository: Repository = {
     notify();
   },
 
-  // Invites
-  getInvites(tripId: string): Invite[] {
-    return (getStore().invites ?? []).filter((i) => i.tripId === tripId);
+  // Moodboard Notes
+  getMoodboardNotes(tripId: string): MoodboardNote[] {
+    return getStore().moodboardNotes.filter((n) => n.tripId === tripId);
   },
-  addInvite(invite: Invite): void {
-    const s = getStore();
-    if (!s.invites) s.invites = [];
-    // Replace any existing unclaimed invite for this email+trip
-    s.invites = s.invites.filter(
-      (i) => !(i.tripId === invite.tripId && i.email === invite.email),
-    );
-    s.invites.push(invite);
+  addMoodboardNote(note: MoodboardNote): void {
+    getStore().moodboardNotes.push(note);
     notify();
   },
-  getInviteByToken(token: string): Invite | undefined {
-    return (getStore().invites ?? []).find((i) => i.token === token);
-  },
-  claimInvite(token: string, claimedAt: string): void {
+  updateMoodboardNote(noteId: string, patch: Partial<MoodboardNote>): void {
     const s = getStore();
-    const idx = (s.invites ?? []).findIndex((i) => i.token === token);
+    const idx = s.moodboardNotes.findIndex((n) => n.id === noteId);
     if (idx !== -1) {
-      s.invites[idx] = { ...s.invites[idx], claimedAt };
+      s.moodboardNotes[idx] = { ...s.moodboardNotes[idx], ...patch };
       notify();
     }
+  },
+  deleteMoodboardNote(noteId: string): void {
+    const s = getStore();
+    s.moodboardNotes = s.moodboardNotes.filter((n) => n.id !== noteId);
+    notify();
   },
 };

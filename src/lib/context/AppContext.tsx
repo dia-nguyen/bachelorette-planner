@@ -13,6 +13,7 @@ import {
   type DashboardData,
   type GuestFieldDef,
   type Membership,
+  type MoodboardNote,
   type PanelState,
   type Photo,
   type PlanActivityInput,
@@ -93,7 +94,7 @@ interface AppContextValue {
   // Mutations — guests
   inviteUser: (name: string, email: string) => void;
   updateUser: (userId: string, patch: Partial<User>) => void;
-  updateMembershipStatus: (userId: string, status: Membership["inviteStatus"]) => void;
+  updateMembershipStatus: (userId: string, status: Membership["accountStatus"]) => void;
   updateMemberRole: (userId: string, role: Role) => void;
 
   // Mutations — events
@@ -127,6 +128,12 @@ interface AppContextValue {
   photos: Photo[];
   addPhoto: (data: Omit<Photo, "id" | "tripId">) => void;
   deletePhoto: (id: string) => void;
+
+  // Moodboard
+  moodboardNotes: MoodboardNote[];
+  addMoodboardNote: (data: Omit<MoodboardNote, "id" | "tripId">) => void;
+  updateMoodboardNote: (id: string, patch: Partial<MoodboardNote>) => void;
+  deleteMoodboardNote: (id: string) => void;
 
   // Cross-entity creation helpers
   createTaskForBudgetItem: (budgetItemId: string) => void;
@@ -185,11 +192,10 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
-  // Subscribe to repository changes (demo mode only)
+  // Subscribe to repository changes (demo mode, and moodboard in all modes)
   useEffect(() => {
-    if (isSupabaseMode) return;
     return subscribe(refresh);
-  }, [isSupabaseMode, refresh]);
+  }, [refresh]);
 
   // Effect 1: Load all trips the user belongs to or created (runs when user changes)
   useEffect(() => {
@@ -252,7 +258,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     }
 
     let isCancelled = false;
-    setIsLoadingData(true);
+    // Only show loading spinner when we have no data yet (initial load)
+    if (!supabaseTrip) setIsLoadingData(true);
 
     const run = async () => {
       try {
@@ -270,9 +277,12 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mappedMemberships: Membership[] = (data.memberships ?? []).map((m: any) => ({
           tripId: m.trip_id,
-          userId: m.profile_id,
+          userId: m.profile_id ?? m.user_id,
           role: m.role,
-          inviteStatus: m.invite_status,
+          accountStatus: m.account_status === "CLAIMED" ? "CLAIMED"
+            : m.account_status === "INVITED" ? "INVITED"
+            : m.invite_status === "ACCEPTED" ? "CLAIMED"
+            : "INVITED",
         }));
 
         if (
@@ -283,7 +293,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             tripId: activeTripId,
             userId: data.trip.created_by,
             role: "MOH_ADMIN",
-            inviteStatus: "ACCEPTED",
+            accountStatus: "CLAIMED",
           });
         }
 
@@ -348,26 +358,37 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
         setSupabaseBudgetItems(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (data.budgetItems ?? []).map((b: any) => ({
-            id: b.id,
-            tripId: b.trip_id,
-            title: b.title,
-            category: b.category,
-            plannedAmount: Number(b.planned_amount ?? 0),
-            actualAmount: Number(b.actual_amount ?? 0),
-            currency: b.currency ?? "USD",
-            responsibleUserId: b.responsible_user_id,
-            paidByUserId: b.paid_by_user_id,
-            status: b.status,
-            relatedEventId: b.related_event_id,
-            relatedTaskId: b.related_task_id,
-            notes: b.notes ?? "",
-            costMode: b.cost_mode ?? undefined,
-            splitType: b.split_type ?? undefined,
-            plannedSplits: (b.planned_splits ?? undefined) as Record<string, number> | undefined,
-            actualSplits: (b.actual_splits ?? undefined) as Record<string, number> | undefined,
-            splitAttendeeUserIds: (b.split_attendee_user_ids ?? []) as string[],
-          })),
+          (data.budgetItems ?? []).map((b: any) => {
+            // Normalize DB uppercase enums → app lowercase
+            const rawCostMode = (b.cost_mode ?? "") as string;
+            const rawSplitType = (b.split_type ?? "") as string;
+            const costMode = rawCostMode === "PER_PERSON" ? "per_person"
+              : rawCostMode === "TOTAL" ? "total"
+              : (rawCostMode.toLowerCase() || undefined) as BudgetItem["costMode"];
+            const splitType = rawSplitType === "EQUAL" ? "even"
+              : rawSplitType === "CUSTOM" ? "custom"
+              : (rawSplitType.toLowerCase() || undefined) as BudgetItem["splitType"];
+            return {
+              id: b.id,
+              tripId: b.trip_id,
+              title: b.title,
+              category: b.category,
+              plannedAmount: Number(b.planned_amount ?? 0),
+              actualAmount: Number(b.actual_amount ?? 0),
+              currency: b.currency ?? "USD",
+              responsibleUserId: b.responsible_user_id,
+              paidByUserId: b.paid_by_user_id,
+              status: b.status,
+              relatedEventId: b.related_event_id,
+              relatedTaskId: b.related_task_id,
+              notes: b.notes ?? "",
+              costMode,
+              splitType,
+              plannedSplits: (b.planned_splits ?? undefined) as Record<string, number> | undefined,
+              actualSplits: (b.actual_splits ?? undefined) as Record<string, number> | undefined,
+              splitAttendeeUserIds: (b.split_attendee_user_ids ?? []) as string[],
+            };
+          }),
         );
 
         setSupabaseChecklistItems(
@@ -434,7 +455,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       const { v4: uuid } = await import("uuid");
       const id = uuid();
       repo.createTrip({ id, ...data, createdByUserId: DEMO_USER_ID, guestFieldSchema: [] });
-      repo.addMembership({ tripId: id, userId: DEMO_USER_ID, role: "MOH_ADMIN", inviteStatus: "ACCEPTED" });
+      repo.addMembership({ tripId: id, userId: DEMO_USER_ID, role: "MOH_ADMIN", accountStatus: "CLAIMED" });
       refresh();
       return;
     }
@@ -512,6 +533,12 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const effectiveTripId = isSupabaseMode ? activeTripId ?? DEMO_TRIP_ID : tripId;
   const effectiveCurrentUserId = isSupabaseMode ? user?.id ?? DEMO_USER_ID : currentUserId;
 
+  // Moodboard always uses localStorage (no Supabase table yet), keyed by effectiveTripId
+  const demoMoodboardNotes = useMemo(() => {
+    void tick;
+    return repo.getMoodboardNotes(effectiveTripId);
+  }, [tick, effectiveTripId]);
+
   const trip = isSupabaseMode ? supabaseTrip : (repo.getTrip(tripId) ?? null);
   const events = isSupabaseMode ? supabaseEvents : demoEvents;
   const tasks = isSupabaseMode ? supabaseTasks : demoTasks;
@@ -521,6 +548,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const checklistItems = isSupabaseMode ? supabaseChecklistItems : demoChecklistItems;
   const polls = isSupabaseMode ? supabasePolls : demoPolls;
   const photos = isSupabaseMode ? supabasePhotos : demoPhotos;
+  // Moodboard always uses localStorage (no Supabase table yet)
+  const moodboardNotes = demoMoodboardNotes;
 
   const guestFieldSchema: GuestFieldDef[] = trip?.guestFieldSchema ?? [];
 
@@ -542,7 +571,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
           outstandingPayments: 0,
           tasksCompletionPercent: 0,
           guestsInvited: 0,
-          guestsConfirmed: 0,
+          guestsClaimed: 0,
         },
         nextUp: [],
         budgetBreakdownByCategory: [],
@@ -572,7 +601,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         tripId,
         userId: id,
         role: "GUEST_CONFIRMED",
-        inviteStatus: "PENDING",
+        accountStatus: "INVITED",
       });
     },
     [tripId]
@@ -607,22 +636,59 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   );
 
   const updateUser = useCallback(
-    (userId: string, patch: Partial<User>) => repo.updateUser(userId, patch),
-    []
+    (userId: string, patch: Partial<User>) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseUsers((prev) =>
+          prev.map((u) => u.id === userId ? { ...u, ...patch } : u)
+        );
+        void fetch(`/api/trips/${activeTripId}/guests`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, patch: { name: patch.name, email: patch.email, custom_fields: patch.customFields } }),
+        });
+        return;
+      }
+      repo.updateUser(userId, patch);
+    },
+    [isSupabaseMode, activeTripId]
   );
 
   const updateMembershipStatus = useCallback(
-    (userId: string, status: Membership["inviteStatus"]) => {
-      repo.updateMembership(tripId, userId, { inviteStatus: status });
+    (userId: string, status: Membership["accountStatus"]) => {
+      if (isSupabaseMode && activeTripId) {
+        // Optimistic update
+        setSupabaseMemberships((prev) =>
+          prev.map((m) => m.userId === userId ? { ...m, accountStatus: status } : m)
+        );
+        const dbStatus = status === "CLAIMED" ? "ACCEPTED" : status === "INVITED" ? "PENDING" : status;
+        void fetch(`/api/trips/${activeTripId}/guests`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, patch: { invite_status: dbStatus } }),
+        });
+        return;
+      }
+      repo.updateMembership(tripId, userId, { accountStatus: status });
     },
-    [tripId]
+    [tripId, isSupabaseMode, activeTripId]
   );
 
   const updateMemberRole = useCallback(
     (userId: string, role: Role) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseMemberships((prev) =>
+          prev.map((m) => m.userId === userId ? { ...m, role } : m)
+        );
+        void fetch(`/api/trips/${activeTripId}/guests`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, patch: { role } }),
+        });
+        return;
+      }
       repo.updateMembership(tripId, userId, { role });
     },
-    [tripId]
+    [tripId, isSupabaseMode, activeTripId]
   );
 
   const addEvent = useCallback(
@@ -632,8 +698,21 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     [tripId]
   );
   const updateEvent = useCallback(
-    (id: string, patch: Partial<TripEvent>) => repo.updateEvent(id, patch),
-    []
+    (id: string, patch: Partial<TripEvent>) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseEvents((prev) =>
+          prev.map((e) => e.id === id ? { ...e, ...patch } : e)
+        );
+        void fetch(`/api/trips/${activeTripId}/events`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, patch }),
+        });
+        return;
+      }
+      repo.updateEvent(id, patch);
+    },
+    [isSupabaseMode, activeTripId]
   );
   const deleteEvent = useCallback(
     (id: string) => repo.deleteEvent(id),
@@ -647,8 +726,21 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     [tripId]
   );
   const updateTask = useCallback(
-    (id: string, patch: Partial<Task>) => repo.updateTask(id, patch),
-    []
+    (id: string, patch: Partial<Task>) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseTasks((prev) =>
+          prev.map((t) => t.id === id ? { ...t, ...patch } : t)
+        );
+        void fetch(`/api/trips/${activeTripId}/events`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "task", id, patch }),
+        });
+        return;
+      }
+      repo.updateTask(id, patch);
+    },
+    [isSupabaseMode, activeTripId]
   );
   const deleteTask = useCallback(
     (id: string) => repo.deleteTask(id),
@@ -662,8 +754,21 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     [tripId]
   );
   const updateBudgetItem = useCallback(
-    (id: string, patch: Partial<BudgetItem>) => repo.updateBudgetItem(id, patch),
-    []
+    (id: string, patch: Partial<BudgetItem>) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseBudgetItems((prev) =>
+          prev.map((b) => b.id === id ? { ...b, ...patch } : b)
+        );
+        void fetch(`/api/trips/${activeTripId}/budget`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, patch }),
+        });
+        return;
+      }
+      repo.updateBudgetItem(id, patch);
+    },
+    [isSupabaseMode, activeTripId]
   );
   const deleteBudgetItem = useCallback(
     (id: string) => repo.deleteBudgetItem(id),
@@ -711,6 +816,26 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   );
   const deletePhoto = useCallback(
     (id: string) => repo.deletePhoto(id),
+    []
+  );
+
+  // Moodboard
+  const addMoodboardNote = useCallback(
+    (data: Omit<MoodboardNote, "id" | "tripId">) => {
+      repo.addMoodboardNote({ ...data, id: uuid(), tripId: effectiveTripId });
+    },
+    [effectiveTripId]
+  );
+  const updateMoodboardNote = useCallback(
+    (id: string, patch: Partial<MoodboardNote>) => {
+      repo.updateMoodboardNote(id, patch);
+    },
+    []
+  );
+  const deleteMoodboardNote = useCallback(
+    (id: string) => {
+      repo.deleteMoodboardNote(id);
+    },
     []
   );
 
@@ -842,6 +967,10 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     photos,
     addPhoto,
     deletePhoto,
+    moodboardNotes,
+    addMoodboardNote,
+    updateMoodboardNote,
+    deleteMoodboardNote,
     createTaskForBudgetItem,
     planActivity,
     clearAllData: () => { clearAllData(); closePanel(); },

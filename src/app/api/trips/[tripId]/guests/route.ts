@@ -37,7 +37,7 @@ export async function POST(
     tripId,
     userId,
     role: "GUEST_CONFIRMED",
-    inviteStatus: "PENDING",
+    accountStatus: "INVITED",
   });
   return NextResponse.json({ tripId, userId }, { status: 201 });
 }

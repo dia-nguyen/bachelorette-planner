@@ -36,7 +36,7 @@ export function NextUp({ events, onEventClick }: NextUpProps) {
           {events.map((ev) => {
             const { day, date } = formatEventDate(ev.startAt);
             const statusLabel =
-              ev.status === "DRAFT" ? "Needs RSVP" : ev.status === "PLANNED" ? "Pending" : ev.status;
+              ev.status === "DRAFT" ? "Draft" : ev.status === "PLANNED" ? "Pending" : ev.status;
             const variant = ev.status === "DRAFT" ? "negative" : eventStatusVariant(ev.status);
 
             return (

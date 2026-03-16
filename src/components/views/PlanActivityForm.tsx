@@ -58,11 +58,7 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
   const [budgetPaidBy, setBudgetPaidBy] = useState("");
   const [budgetNotes, setBudgetNotes] = useState("");
 
-  const acceptedUsers = users.filter((u) =>
-    memberships.some(
-      (m) => m.userId === u.id && m.inviteStatus === "ACCEPTED"
-    )
-  );
+  const acceptedUsers = users;
 
   const toggleAttendee = (userId: string) => {
     setEventAttendees((prev) =>

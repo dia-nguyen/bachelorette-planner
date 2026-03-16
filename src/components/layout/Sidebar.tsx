@@ -7,6 +7,7 @@ import {
   HiOutlineCheckCircle,
   HiOutlineClipboardList,
   HiOutlineCog,
+  HiOutlineColorSwatch,
   HiOutlineCurrencyDollar,
   HiOutlinePlus,
   HiOutlineUsers,
@@ -25,6 +26,7 @@ const navItems: NavItem[] = [
   { icon: <HiOutlineUsers size={22} />, label: "Guests", id: "guests" },
   { icon: <HiOutlineCurrencyDollar size={22} />, label: "Budget", id: "budget" },
   { icon: <HiOutlineClipboardList size={22} />, label: "Tasks", id: "tasks" },
+  { icon: <HiOutlineColorSwatch size={22} />, label: "Moodboard", id: "moodboard" },
 ];
 
 interface SidebarProps {

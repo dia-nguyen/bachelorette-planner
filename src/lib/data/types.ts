@@ -6,7 +6,7 @@
 
 export type Role = "MOH_ADMIN" | "GUEST_CONFIRMED";
 
-export type InviteStatus = "PENDING" | "ACCEPTED" | "DECLINED";
+export type AccountStatus = "INVITED" | "CLAIMED";
 
 export type EventStatus = "DRAFT" | "PLANNED" | "CONFIRMED" | "CANCELED";
 
@@ -67,7 +67,7 @@ export interface Membership {
   tripId: string;
   userId: string;
   role: Role;
-  inviteStatus: InviteStatus;
+  accountStatus: AccountStatus;
 }
 
 export interface TripEvent {
@@ -142,7 +142,7 @@ export interface DashboardKPIs {
   outstandingPayments: number;
   tasksCompletionPercent: number;
   guestsInvited: number;
-  guestsConfirmed: number;
+  guestsClaimed: number;
 }
 
 export interface CategoryBreakdown {
@@ -285,4 +285,31 @@ export interface Photo {
   uploadedByUserId: string;
   relatedEventId: string | null;
   createdAt: string; // ISO
+}
+
+// ---- Moodboard ----
+
+export type StickyNoteColor =
+  | "yellow"
+  | "pink"
+  | "blue"
+  | "green"
+  | "purple"
+  | "orange";
+
+export interface MoodboardNote {
+  id: string;
+  tripId: string;
+  title: string;
+  text: string;
+  /** base64 data URI for pasted images */
+  imageDataUrl: string | null;
+  color: StickyNoteColor;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  createdByUserId: string;
+  updatedAt: string; // ISO
 }

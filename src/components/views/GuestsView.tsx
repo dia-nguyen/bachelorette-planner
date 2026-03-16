@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge, EmptyState, inviteStatusVariant } from "@/components/ui";
+import { Badge, EmptyState, accountStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
-import type { GuestFieldDef, InviteStatus, Membership, Role, User } from "@/lib/data";
+import type { GuestFieldDef, AccountStatus, Membership, Role, User } from "@/lib/data";
 import { useRef, useState } from "react";
 
 const FIELD_TYPES: { value: GuestFieldDef["type"]; label: string; }[] = [
@@ -19,10 +19,9 @@ const ROLES: { value: Role; label: string; }[] = [
   { value: "GUEST_CONFIRMED", label: "Guest" },
 ];
 
-const INVITE_STATUSES: { value: InviteStatus; label: string; }[] = [
-  { value: "PENDING", label: "Pending" },
-  { value: "ACCEPTED", label: "Accepted" },
-  { value: "DECLINED", label: "Declined" },
+const ACCOUNT_STATUSES: { value: AccountStatus; label: string; }[] = [
+  { value: "INVITED", label: "Invited" },
+  { value: "CLAIMED", label: "Claimed" },
 ];
 
 function SchemaManager({
@@ -195,15 +194,15 @@ function GuestTableRow({
   membership: Membership;
   fieldSchema: GuestFieldDef[];
   colSpan: number;
-  onSave: (patch: { name: string; email: string; role: Role; inviteStatus: InviteStatus; customFields: Record<string, string>; }) => void;
-  onStatusChange: (status: InviteStatus) => void;
+  onSave: (patch: { name: string; email: string; role: Role; accountStatus: AccountStatus; customFields: Record<string, string>; }) => void;
+  onStatusChange: (status: AccountStatus) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({
     name: user.name,
     email: user.email,
     role: membership.role,
-    inviteStatus: membership.inviteStatus,
+    accountStatus: membership.accountStatus,
     customFields: { ...(user.customFields ?? {}) },
   });
 
@@ -212,7 +211,7 @@ function GuestTableRow({
       name: user.name,
       email: user.email,
       role: membership.role,
-      inviteStatus: membership.inviteStatus,
+      accountStatus: membership.accountStatus,
       customFields: { ...(user.customFields ?? {}) },
     });
     setEditing(true);
@@ -244,8 +243,8 @@ function GuestTableRow({
           </Badge>
         </td>
         <td style={cellSt}>
-          <Badge variant={inviteStatusVariant(membership.inviteStatus)}>
-            {membership.inviteStatus}
+          <Badge variant={accountStatusVariant(membership.accountStatus)}>
+            {membership.accountStatus}
           </Badge>
         </td>
         {fieldSchema.map((f) => (
@@ -255,11 +254,8 @@ function GuestTableRow({
         ))}
         <td style={{ ...cellSt, textAlign: "right", whiteSpace: "nowrap" }}>
           <div className="flex gap-1 justify-end">
-            {membership.inviteStatus === "PENDING" && (
-              <>
-                <button onClick={() => onStatusChange("ACCEPTED")} style={{ padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-status-positive)", border: "none", fontSize: 11, cursor: "pointer", color: "#166534", fontWeight: 600 }}>Accept</button>
-                <button onClick={() => onStatusChange("DECLINED")} style={{ padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-status-negative)", border: "none", fontSize: 11, cursor: "pointer", color: "#991B1B", fontWeight: 600 }}>Decline</button>
-              </>
+            {membership.accountStatus === "INVITED" && (
+              <button onClick={() => onStatusChange("CLAIMED")} style={{ padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-status-positive)", border: "none", fontSize: 11, cursor: "pointer", color: "#166534", fontWeight: 600 }}>Mark Claimed</button>
             )}
             <button onClick={openEdit} title="Edit" style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "var(--color-text-secondary)" }}>✏️</button>
           </div>
@@ -287,9 +283,9 @@ function GuestTableRow({
                   </select>
                 </label>
                 <label style={{ flex: "0 0 130px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-                  RSVP
-                  <select style={{ ...selectSt, marginTop: 4 }} value={draft.inviteStatus} onChange={(e) => setDraft((d) => ({ ...d, inviteStatus: e.target.value as InviteStatus }))}>
-                    {INVITE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  Status
+                  <select style={{ ...selectSt, marginTop: 4 }} value={draft.accountStatus} onChange={(e) => setDraft((d) => ({ ...d, accountStatus: e.target.value as AccountStatus }))}>
+                    {ACCOUNT_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </label>
                 {fieldSchema.map((f) => (
@@ -395,7 +391,7 @@ export function GuestsView() {
               onClick={() => { setShowInviteForm((v) => !v); setInviteLink(null); setInviteError(null); }}
               style={{ padding: "8px 20px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 500, cursor: "pointer" }}
             >
-              + Invite Guest
+              + Add Guest
             </button>
           )}
         </div>
@@ -482,7 +478,7 @@ export function GuestsView() {
                 <th style={headCellSt}>Guest</th>
                 <th style={headCellSt}>Email</th>
                 <th style={headCellSt}>Role</th>
-                <th style={headCellSt}>RSVP</th>
+                <th style={headCellSt}>Status</th>
                 {guestFieldSchema.map((f) => (
                   <th key={f.id} style={headCellSt}>{f.label}</th>
                 ))}
@@ -501,10 +497,10 @@ export function GuestsView() {
                     fieldSchema={guestFieldSchema}
                     colSpan={colSpan}
                     onStatusChange={(status) => updateMembershipStatus(m.userId, status)}
-                    onSave={({ name, email, role, inviteStatus, customFields }) => {
+                    onSave={({ name, email, role, accountStatus, customFields }) => {
                       updateUser(m.userId, { name, email, customFields });
                       updateMemberRole(m.userId, role);
-                      updateMembershipStatus(m.userId, inviteStatus);
+                      updateMembershipStatus(m.userId, accountStatus);
                     }}
                   />
                 );

@@ -38,20 +38,32 @@ export async function GET(
     supabase.from("photos").select("*").eq("trip_id", tripId),
   ]);
 
-  // Gather profile IDs from memberships + trip creator
-  const memberProfileIds = new Set(
-    (membershipsRes.data ?? []).map((m) => m.profile_id as string),
+  // Gather member IDs from memberships + trip creator
+  // Support both schema variants: profile_id (new) and user_id (legacy)
+  const memberIds = new Set(
+    (membershipsRes.data ?? []).map((m) => (m.profile_id ?? m.user_id) as string),
   );
   if (tripRes.data?.created_by) {
-    memberProfileIds.add(tripRes.data.created_by);
+    memberIds.add(tripRes.data.created_by);
   }
 
   let profiles: Record<string, unknown>[] = [];
-  if (memberProfileIds.size > 0) {
-    const profilesRes = await supabase
+  if (memberIds.size > 0) {
+    const ids = Array.from(memberIds);
+    // Try "profiles" table first, fall back to "users" table
+    let profilesRes = await supabase
       .from("profiles")
       .select("id,name,email,avatar_color,custom_fields")
-      .in("id", Array.from(memberProfileIds));
+      .in("id", ids);
+    if (profilesRes.error || (profilesRes.data ?? []).length === 0) {
+      const usersRes = await supabase
+        .from("users")
+        .select("id,name,email,avatar_url,custom_fields")
+        .in("id", ids);
+      if (!usersRes.error) {
+        profilesRes = usersRes as typeof profilesRes;
+      }
+    }
     profiles = (profilesRes.data ?? []) as Record<string, unknown>[];
   }
 

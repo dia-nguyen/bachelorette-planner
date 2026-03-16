@@ -3,7 +3,7 @@ export {
   Badge,
   budgetStatusVariant,
   eventStatusVariant,
-  inviteStatusVariant,
+  accountStatusVariant,
   taskStatusVariant,
 } from "./Badge";
 export { Card } from "./Card";
