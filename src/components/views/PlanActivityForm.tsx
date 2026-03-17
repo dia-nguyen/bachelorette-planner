@@ -4,6 +4,9 @@ import { Avatar, Card } from "@/components/ui";
 import { useApp } from "@/lib/context";
 import type { BudgetCategory, BudgetItemStatus, CostSplitType, EventStatus, TaskPriority, TaskStatus } from "@/lib/data";
 import { useState } from "react";
+import { BsCalendarDate } from "react-icons/bs";
+import { IoIosCheckboxOutline } from "react-icons/io";
+import { PiMoneyBold } from "react-icons/pi";
 
 const CATEGORIES: BudgetCategory[] = [
   "ACTIVITY", "DECORATION", "RESTAURANT", "ACCOMMODATION",
@@ -143,64 +146,88 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
       : actualPreviewAmount;
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-4">
+    <Card
+      style={{
+        padding: 0,
+        maxHeight: "92vh",
+        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
+      <div
+        className="flex items-center justify-between"
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 2,
+          background: "var(--color-bg-surface)",
+          borderBottom: "1px solid var(--color-border)",
+          padding: "14px 18px",
+        }}
+      >
         <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700 }}>
           Plan Something
         </h3>
         <button onClick={onClose} style={closeBtnStyle}>✕</button>
       </div>
 
-      <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 16 }}>
-        Describe what you&apos;re planning, then toggle which pieces to track. Everything gets linked automatically.
-      </p>
-
-      {submitError && (
-        <p style={{ fontSize: "var(--font-sm)", color: "#dc2626", marginBottom: 16 }}>
-          {submitError}
+      <div style={{ padding: "16px 18px 12px", flex: 1, minHeight: 0 }}>
+        <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 16 }}>
+          Describe what you&apos;re planning, then toggle which pieces to track. Everything gets linked automatically.
         </p>
-      )}
 
-      {/* Core fields */}
-      <div className="grid grid-cols-1 gap-3 mb-4">
-        <label style={labelStyle}>
-          What are you planning?
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Dinner at La Rosa, Buy decorations, Create slideshow..."
-            style={inputStyle}
-            autoFocus
-          />
-        </label>
-        <label style={labelStyle}>
-          Details (optional)
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Any notes or details..."
-            rows={2}
-            style={{ ...inputStyle, resize: "vertical" }}
-          />
-        </label>
-      </div>
+        {submitError && (
+          <p style={{ fontSize: "var(--font-sm)", color: "#dc2626", marginBottom: 16 }}>
+            {submitError}
+          </p>
+        )}
 
-      {/* Toggle pills */}
-      <div className="mb-4">
-        <p style={{ ...labelStyle, marginBottom: 8 }}>What does this involve?</p>
-        <div className="flex flex-wrap gap-2">
-          <TogglePill active={wantEvent} onClick={() => setWantEvent(!wantEvent)} emoji="📅" label="Event / Date" />
-          <TogglePill active={wantTask} onClick={() => setWantTask(!wantTask)} emoji="✅" label="To-Do" />
-          <TogglePill active={wantBudget} onClick={() => setWantBudget(!wantBudget)} emoji="💰" label="Budget" />
+        {/* Core fields */}
+        <div className="grid grid-cols-1 gap-3 mb-4">
+          <label style={labelStyle}>
+            What are you planning?
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Dinner at La Rosa, Buy decorations, Create slideshow..."
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Details (optional)
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Any notes or details..."
+              rows={2}
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </label>
         </div>
-      </div>
 
-      {/* Conditional sections */}
-      <div className="flex flex-col gap-4">
+        {/* Toggle pills */}
+        <div className="mb-4">
+          <p style={{ ...labelStyle, marginBottom: 8 }}>What does this involve?</p>
+          <div className="flex flex-wrap gap-2">
+          <TogglePill active={wantEvent} onClick={() => setWantEvent(!wantEvent)} icon={<BsCalendarDate size={14} />} label="Event / Date" />
+          <TogglePill active={wantTask} onClick={() => setWantTask(!wantTask)} icon={<IoIosCheckboxOutline size={15} />} label="To-Do" />
+          <TogglePill active={wantBudget} onClick={() => setWantBudget(!wantBudget)} icon={<PiMoneyBold size={14} />} label="Budget" />
+          </div>
+        </div>
+
+        {/* Conditional sections */}
+        <div className="flex flex-col gap-4">
         {wantEvent && (
           <section style={sectionStyle}>
-            <p style={sectionHeader}>📅 Event Details</p>
+            <p style={sectionHeader}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <BsCalendarDate size={14} />
+                <span>Event Details</span>
+              </span>
+            </p>
             <SectionTitleField
               baseTitle={title}
               unlocked={eventTitleUnlocked}
@@ -292,7 +319,12 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
 
         {wantTask && (
           <section style={sectionStyle}>
-            <p style={sectionHeader}>✅ To-Do Details</p>
+            <p style={sectionHeader}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <IoIosCheckboxOutline size={15} />
+                <span>To-Do Details</span>
+              </span>
+            </p>
             <SectionTitleField
               baseTitle={title}
               unlocked={taskTitleUnlocked}
@@ -357,7 +389,12 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
 
         {wantBudget && (
           <section style={sectionStyle}>
-            <p style={sectionHeader}>💰 Budget Details</p>
+            <p style={sectionHeader}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <PiMoneyBold size={14} />
+                <span>Budget Details</span>
+              </span>
+            </p>
             <SectionTitleField
               baseTitle={title}
               unlocked={budgetTitleUnlocked}
@@ -457,10 +494,21 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
             </label>
           </section>
         )}
+        </div>
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-6">
+      <div
+        className="flex items-center justify-between"
+        style={{
+          position: "sticky",
+          bottom: 0,
+          zIndex: 2,
+          background: "var(--color-bg-surface)",
+          borderTop: "1px solid var(--color-border)",
+          padding: "12px 18px",
+        }}
+      >
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
           {entityCount === 0
             ? "Toggle at least one item above"
@@ -543,10 +591,10 @@ function SectionTitleField({
 
 // ---- Toggle pill sub-component ----
 
-function TogglePill({ active, onClick, emoji, label }: {
+function TogglePill({ active, onClick, icon, label }: {
   active: boolean;
   onClick: () => void;
-  emoji: string;
+  icon: React.ReactNode;
   label: string;
 }) {
   return (
@@ -566,7 +614,7 @@ function TogglePill({ active, onClick, emoji, label }: {
         transition: "all 0.15s ease",
       }}
     >
-      <span>{emoji}</span>
+      <span style={{ display: "inline-flex", alignItems: "center" }}>{icon}</span>
       <span>{label}</span>
     </button>
   );
@@ -586,7 +634,7 @@ const inputStyle: React.CSSProperties = {
   padding: "8px 12px",
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
-  fontSize: "var(--font-md)",
+  fontSize: "16px",
 };
 
 const sectionStyle: React.CSSProperties = {

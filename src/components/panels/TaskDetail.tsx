@@ -4,6 +4,9 @@ import { Badge, taskStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import type { BudgetItem, Task, TaskPriority, TaskStatus, TripEvent, User } from "@/lib/data";
 import { useState } from "react";
+import { HiPencilAlt } from "react-icons/hi";
+import { BsCalendarDate } from "react-icons/bs";
+import { PiMoneyBold } from "react-icons/pi";
 
 interface TaskDetailProps {
   task: Task;
@@ -242,7 +245,9 @@ export function TaskDetail({
             {canDelete && (
               <button onClick={() => setShowDeleteModal(true)} style={dangerOutlineBtnStyle}>Delete</button>
             )}
-            <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
+            <button onClick={handleEdit} style={editBtnStyle} title="Edit" aria-label="Edit">
+              <HiPencilAlt size={14} />
+            </button>
           </div>
         </div>
 
@@ -278,12 +283,18 @@ export function TaskDetail({
             <div className="flex flex-wrap gap-2">
               {linkedEvent && (
                 <button onClick={() => onNavigate("event", linkedEvent.id)} style={linkChipStyle}>
-                  📅 {linkedEvent.title}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <BsCalendarDate size={14} />
+                    <span>{linkedEvent.title}</span>
+                  </span>
                 </button>
               )}
               {linkedBudget && (
                 <button onClick={() => onNavigate("budget", linkedBudget.id)} style={linkChipStyle}>
-                  💰 {linkedBudget.title}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <PiMoneyBold size={14} />
+                    <span>{linkedBudget.title}</span>
+                  </span>
                 </button>
               )}
             </div>
@@ -383,13 +394,14 @@ const linkChipStyle: React.CSSProperties = {
 };
 
 const editBtnStyle: React.CSSProperties = {
-  padding: "6px 14px",
+  padding: "6px 10px",
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
-  fontSize: "var(--font-sm)",
-  fontWeight: 500,
   cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const dangerOutlineBtnStyle: React.CSSProperties = {

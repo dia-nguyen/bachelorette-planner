@@ -4,6 +4,7 @@ import { Badge, Card, EmptyState, eventStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
 import { useMemo } from "react";
+import { FaLocationDot } from "react-icons/fa6";
 
 /** Statuses considered "at least planned" */
 const ITINERARY_STATUSES = new Set(["PLANNED", "CONFIRMED"]);
@@ -181,7 +182,10 @@ export function ItineraryView() {
                               wordBreak: "break-word",
                             }}
                           >
-                            📍 {ev.location}
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                              <FaLocationDot size={14} />
+                              <span>{ev.location}</span>
+                            </span>
                           </p>
                         )}
                         {/* Description */}

@@ -308,14 +308,25 @@ export function PollsView() {
             style={{
               width: "min(860px, 96vw)",
               maxHeight: "88vh",
-              overflowY: "auto",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
               background: "var(--color-bg-surface)",
               borderRadius: "var(--radius-lg)",
               boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-              padding: "24px 26px",
             }}
           >
-            <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+            <div
+              className="flex items-center justify-between"
+              style={{
+                position: "sticky",
+                top: 0,
+                zIndex: 2,
+                background: "var(--color-bg-surface)",
+                borderBottom: "1px solid var(--color-border)",
+                padding: "14px 18px",
+              }}
+            >
               <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700 }}>Create Poll</h3>
               <button
                 onClick={() => {
@@ -328,7 +339,16 @@ export function PollsView() {
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div
+              className="flex flex-col gap-3"
+              style={{
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+                padding: "16px 18px",
+                minHeight: 0,
+                flex: 1,
+              }}
+            >
               <label style={{ fontSize: "var(--font-sm)", fontWeight: 600 }}>
                 Question
                 <input
@@ -336,7 +356,6 @@ export function PollsView() {
                   onChange={(e) => setQuestion(e.target.value)}
                   placeholder="Where should we do brunch?"
                   style={inputStyle}
-                  autoFocus
                 />
               </label>
 
@@ -441,28 +460,38 @@ export function PollsView() {
                   Leave empty to make this poll optional for everyone.
                 </p>
               </div>
+            </div>
 
-              <div className="flex items-center justify-end gap-2" style={{ marginTop: 4 }}>
-                <button
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    resetCreateForm();
-                  }}
-                  style={secondaryButtonStyle}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={onCreatePoll}
-                  disabled={hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2}
-                  style={{
-                    ...primaryButtonStyle,
-                    opacity: hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2 ? 0.6 : 1,
-                  }}
-                >
-                  Create poll
-                </button>
-              </div>
+            <div
+              className="flex items-center justify-end gap-2"
+              style={{
+                position: "sticky",
+                bottom: 0,
+                zIndex: 2,
+                background: "var(--color-bg-surface)",
+                borderTop: "1px solid var(--color-border)",
+                padding: "12px 18px",
+              }}
+            >
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  resetCreateForm();
+                }}
+                style={secondaryButtonStyle}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onCreatePoll}
+                disabled={hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2 ? 0.6 : 1,
+                }}
+              >
+                Create poll
+              </button>
             </div>
           </div>
         </div>
@@ -534,7 +563,7 @@ const inputStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
-  fontSize: "var(--font-sm)",
+  fontSize: "16px",
 };
 
 const secondaryButtonStyle: React.CSSProperties = {

@@ -5,6 +5,10 @@ import { Avatar } from "@/components/ui/Avatar";
 import type { BudgetCategory, BudgetItem, BudgetItemStatus, CostSplitType, Task, TripEvent, User } from "@/lib/data";
 import { formatCurrency } from "@/lib/domain";
 import { useState } from "react";
+import { HiPencilAlt } from "react-icons/hi";
+import { BsCalendarDate } from "react-icons/bs";
+import { IoIosCheckboxOutline } from "react-icons/io";
+import { PiMoneyBold } from "react-icons/pi";
 
 interface BudgetDetailProps {
   item: BudgetItem;
@@ -188,7 +192,10 @@ export function BudgetDetail({
 
         {/* ---- Cost section ---- */}
         <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--color-bg-muted)" }}>
-          <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 10 }}>💰 Cost</p>
+          <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <PiMoneyBold size={14} />
+            <span>Cost</span>
+          </p>
           <div className="flex gap-3 flex-wrap mb-3">
             <label style={labelStyle}>
               Enter&nbsp;as
@@ -500,7 +507,9 @@ export function BudgetDetail({
             {canDelete && (
               <button onClick={() => setShowDeleteModal(true)} style={dangerOutlineBtnStyle}>Delete</button>
             )}
-            <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
+            <button onClick={handleEdit} style={editBtnStyle} title="Edit" aria-label="Edit">
+              <HiPencilAlt size={14} />
+            </button>
           </div>
         </div>
 
@@ -512,7 +521,10 @@ export function BudgetDetail({
           }}
         >
           <div className="flex items-center justify-between mb-3">
-            <p style={{ fontWeight: 600, fontSize: "var(--font-sm)" }}>💰 Cost</p>
+            <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <PiMoneyBold size={14} />
+              <span>Cost</span>
+            </p>
             <div className="flex gap-2">
               <Badge variant="neutral">
                 {(item.costMode ?? "total") === "per_person" ? "Per Person" : "Total"}
@@ -625,12 +637,18 @@ export function BudgetDetail({
             <div className="flex flex-wrap gap-2">
               {linkedEvent && (
                 <button onClick={() => onNavigate("event", linkedEvent.id)} style={linkChipStyle}>
-                  📅 {linkedEvent.title}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <BsCalendarDate size={14} />
+                    <span>{linkedEvent.title}</span>
+                  </span>
                 </button>
               )}
               {linkedTask && (
                 <button onClick={() => onNavigate("task", linkedTask.id)} style={linkChipStyle}>
-                  ✅ {linkedTask.title}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <IoIosCheckboxOutline size={15} />
+                    <span>{linkedTask.title}</span>
+                  </span>
                 </button>
               )}
             </div>
@@ -734,13 +752,14 @@ const actionBtnStyle: React.CSSProperties = {
 };
 
 const editBtnStyle: React.CSSProperties = {
-  padding: "6px 14px",
+  padding: "6px 10px",
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
-  fontSize: "var(--font-sm)",
-  fontWeight: 500,
   cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const saveBtnStyle: React.CSSProperties = {

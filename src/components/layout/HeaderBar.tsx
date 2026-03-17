@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { HiOutlinePlus } from "react-icons/hi";
+import { HiOutlinePlus, HiTrash } from "react-icons/hi";
 
 interface HeaderBarProps {
   title: string;
@@ -153,7 +153,7 @@ export function HeaderBar({
               )}
               {onClearAll && (
                 <MenuAction
-                  label="🗑  Delete All Data"
+                  label={<span className="flex items-center gap-2"><HiTrash size={14} /> Delete All Data</span>}
                   description="Remove all events, tasks & budget items"
                   danger
                   onClick={() => { onClearAll(); setMenuOpen(false); }}
@@ -209,7 +209,7 @@ function MenuAction({
   danger,
   onClick,
 }: {
-  label: string;
+  label: React.ReactNode;
   description?: string;
   danger?: boolean;
   onClick: () => void;

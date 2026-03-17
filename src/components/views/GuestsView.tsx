@@ -5,6 +5,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
 import type { AccountStatus, GuestFieldDef, Membership, Role, User } from "@/lib/data";
 import { useRef, useState } from "react";
+import { HiCog, HiPencilAlt, HiTrash } from "react-icons/hi";
 
 const FIELD_TYPES: { value: GuestFieldDef["type"]; label: string; }[] = [
   { value: "text", label: "Short text" },
@@ -100,9 +101,14 @@ function SchemaManager({
                     {FIELD_TYPES.find((t) => t.value === f.type)?.label ?? f.type}
                   </span>
                 </div>
-                <button onClick={() => onRemove(f.id)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: "var(--font-sm)", padding: "2px 6px" }}
-                  title="Remove field">🗑</button>
+                <button
+                  onClick={() => onRemove(f.id)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: "var(--font-sm)", padding: "2px 6px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                  title="Remove field"
+                  aria-label="Remove field"
+                >
+                  <HiTrash size={14} />
+                </button>
               </div>
             ))}
           </div>
@@ -266,12 +272,20 @@ function GuestTableRow({
                   }
                 }}
                 title="Delete"
-                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "#dc2626" }}
+                aria-label="Delete"
+                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "#dc2626", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
-                🗑
+                <HiTrash size={14} />
               </button>
             )}
-            <button onClick={openEdit} title="Edit" style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "var(--color-text-secondary)" }}>✏️</button>
+            <button
+              onClick={openEdit}
+              title="Edit"
+              aria-label="Edit"
+              style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "var(--color-text-secondary)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <HiPencilAlt size={14} />
+            </button>
           </div>
         </td>
       </tr>
@@ -369,7 +383,10 @@ export function GuestsView() {
               onClick={() => setShowSchemaManager((v) => !v)}
               style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: showSchemaManager ? "var(--color-bg-muted)" : "var(--color-bg-surface)", fontWeight: 500, cursor: "pointer", fontSize: "var(--font-sm)" }}
             >
-              ⚙️ Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <HiCog size={15} />
+                <span>Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}</span>
+              </span>
             </button>
           )}
           {isAdmin && (

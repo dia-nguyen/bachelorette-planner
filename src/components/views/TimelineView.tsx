@@ -4,6 +4,7 @@ import { Badge, Card, EmptyState, eventStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
 import { useMemo } from "react";
+import { FaLocationDot } from "react-icons/fa6";
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -119,7 +120,10 @@ export function TimelineView() {
                         {/* Location */}
                         {ev.location && (
                           <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginTop: 4 }}>
-                            📍 {ev.location}
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                              <FaLocationDot size={14} />
+                              <span>{ev.location}</span>
+                            </span>
                           </p>
                         )}
                         {/* Description */}

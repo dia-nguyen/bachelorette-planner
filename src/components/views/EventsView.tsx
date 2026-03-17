@@ -2,6 +2,15 @@
 
 import { Badge, Card, EmptyState, eventStatusVariant } from "@/components/ui";
 import { useApp } from "@/lib/context";
+import { BsCalendarDate } from "react-icons/bs";
+import { FaLocationDot } from "react-icons/fa6";
+import { PiUsersBold } from "react-icons/pi";
+
+function formatCompactTime(date: Date) {
+  return date
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    .replace(" ", "\u00A0");
+}
 
 export function EventsView() {
   const { events, openPanel } = useApp();
@@ -26,16 +35,29 @@ export function EventsView() {
                     <Badge variant={eventStatusVariant(ev.status)}>{ev.status}</Badge>
                   </div>
                   <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-                    📍 {ev.location}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <FaLocationDot size={14} />
+                      <span>{ev.location}</span>
+                    </span>
                   </p>
                   <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginTop: 4 }}>
-                    📅 {start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    <span style={{ whiteSpace: "nowrap" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <BsCalendarDate size={14} />
+                        <span>{start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                      </span>
+                    </span>
                     {" · "}
-                    {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    <span style={{ whiteSpace: "nowrap" }}>
+                      {formatCompactTime(start)}
+                    </span>
                   </p>
                   {(ev.attendeeUserIds?.length ?? 0) > 0 && (
                     <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginTop: 4 }}>
-                      👥 {ev.attendeeUserIds.length} attending
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <PiUsersBold size={14} />
+                        <span>{ev.attendeeUserIds.length} attending</span>
+                      </span>
                     </p>
                   )}
                   {ev.description && (

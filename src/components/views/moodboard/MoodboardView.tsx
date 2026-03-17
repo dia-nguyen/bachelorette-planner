@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/context";
-import type { MoodboardNote, StickyNoteColor } from "@/lib/data/types";
+import type { MoodboardNote } from "@/lib/data/types";
 import { CANVAS_IMAGE_TITLE } from "@/lib/moodboard/display";
 import { normalizeNoteImage, optimizePastedImage } from "@/lib/moodboard/images";
 import {
@@ -19,15 +19,6 @@ const MAX_SCALE = 2;
 const DEFAULT_PASTED_NOTE_WIDTH = 320;
 const DEFAULT_PASTED_NOTE_HEIGHT = 280;
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 768px)";
-
-const NOTE_COLORS: StickyNoteColor[] = [
-  "yellow",
-  "pink",
-  "blue",
-  "green",
-  "purple",
-  "orange",
-];
 
 export function MoodboardView() {
   const {
@@ -344,33 +335,6 @@ export function MoodboardView() {
     [moodboardNotes],
   );
 
-  // ---- Add note ----
-  const handleAddNote = useCallback(
-    (color: StickyNoteColor = "yellow") => {
-      const center = getViewportCenterCanvasPoint();
-
-      // Slight random jitter so notes don't stack perfectly
-      const jitterX = (Math.random() - 0.5) * 60;
-      const jitterY = (Math.random() - 0.5) * 60;
-
-      pushUndo();
-      addMoodboardNote({
-        title: "",
-        text: "",
-        images: [],
-        color,
-        x: center.x + jitterX,
-        y: center.y + jitterY,
-        width: 260,
-        height: 200,
-        zIndex: getNextZIndex(),
-        createdByUserId: currentUserId,
-        updatedAt: new Date().toISOString(),
-      });
-    },
-    [addMoodboardNote, currentUserId, getNextZIndex, getViewportCenterCanvasPoint, pushUndo],
-  );
-
   const handleCanvasPasteImage = useCallback(
     async (file: File) => {
       const center = getViewportCenterCanvasPoint();
@@ -528,49 +492,6 @@ export function MoodboardView() {
             boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
           }}
         >
-          {/* Add note buttons for each color */}
-          {NOTE_COLORS.map((color) => (
-            <button
-              key={color}
-              onClick={() => handleAddNote(color)}
-              title={`Add ${color} note`}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                border: "1px solid #D1D5DB",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 16,
-                background:
-                  color === "yellow"
-                    ? "#FEF3C7"
-                    : color === "pink"
-                      ? "#FCE7F3"
-                      : color === "blue"
-                        ? "#DBEAFE"
-                        : color === "green"
-                          ? "#D1FAE5"
-                          : color === "purple"
-                            ? "#EDE9FE"
-                            : "#FFEDD5",
-              }}
-            >
-              +
-            </button>
-          ))}
-
-          <div
-            style={{
-              width: 1,
-              height: 20,
-              background: "#E5E7EB",
-              margin: "0 4px",
-            }}
-          />
-
           {/* Undo / Redo */}
           <button
             onClick={undo}
@@ -683,24 +604,17 @@ export function MoodboardView() {
             Reset
           </button>
 
-          <div
-            style={{
-              width: 1,
-              height: 20,
-              background: "#E5E7EB",
-              margin: "0 4px",
-            }}
-          />
-
-          <span
-            style={{
-              fontSize: 11,
-              color: pasteError ? "#B91C1C" : "#6B7280",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {isPastingImage ? "Pasting image..." : pasteError ?? "Paste images on the canvas"}
-          </span>
+          {pasteError && (
+            <span
+              style={{
+                fontSize: 11,
+                color: "#B91C1C",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isPastingImage ? "Pasting image..." : pasteError}
+            </span>
+          )}
         </div>
       )}
 
@@ -815,9 +729,7 @@ export function MoodboardView() {
               ? "Drag the canvas to explore."
               : (
                 <>
-                  Click a colored button above to add your first sticky note.
-                  <br />
-                  Drag the canvas to pan, scroll to zoom, or paste an image.
+                  Drag the canvas to pan and scroll to zoom.
                 </>
               )}
           </div>

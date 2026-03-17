@@ -4,6 +4,11 @@ import { Avatar, Badge, eventStatusVariant } from "@/components/ui";
 import type { BudgetItem, EventStatus, Task, TripEvent, User } from "@/lib/data";
 import { formatCurrency } from "@/lib/domain";
 import { useState } from "react";
+import { HiPencilAlt } from "react-icons/hi";
+import { IoIosCheckboxOutline } from "react-icons/io";
+import { FaLocationDot } from "react-icons/fa6";
+import { PiMoneyBold } from "react-icons/pi";
+import { PiUsersBold } from "react-icons/pi";
 
 interface EventDetailProps {
   event: TripEvent;
@@ -20,6 +25,12 @@ interface EventDetailProps {
 }
 
 const EVENT_STATUSES: EventStatus[] = ["DRAFT", "PLANNED", "CONFIRMED", "CANCELED"];
+
+function formatCompactTime(date: Date) {
+  return date
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    .replace(" ", "\u00A0");
+}
 
 export function EventDetail({
   event,
@@ -204,8 +215,9 @@ export function EventDetail({
           </div>
         </div>
 
-        <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", padding: "4px 10px", background: "var(--color-bg-muted)", borderRadius: "var(--radius-md)" }}>
-          💰 Cost is managed in the linked budget item.
+        <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", padding: "4px 10px", background: "var(--color-bg-muted)", borderRadius: "var(--radius-md)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <PiMoneyBold size={14} />
+          <span>Cost is managed in the linked budget item.</span>
         </p>
 
         {/* Attendees (live, not part of draft) */}
@@ -278,14 +290,12 @@ export function EventDetail({
             </h2>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant={eventStatusVariant(event.status)}>{event.status}</Badge>
-              <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
-                ·{" "}
-                {startDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                {" · "}
-                {startDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                {endDate && (
-                  <>{" – "}{endDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</>
-                )}
+              <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)", whiteSpace: "nowrap" }}>
+                · {startDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              </span>
+              <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)", whiteSpace: "nowrap" }}>
+                · {formatCompactTime(startDate)}
+                {endDate && <>{" – "}{formatCompactTime(endDate)}</>}
               </span>
             </div>
           </div>
@@ -293,14 +303,30 @@ export function EventDetail({
             {canDelete && (
               <button onClick={() => setShowDeleteModal(true)} style={dangerOutlineBtnStyle}>Delete</button>
             )}
-            <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
+            <button onClick={handleEdit} style={editBtnStyle} title="Edit" aria-label="Edit">
+              <HiPencilAlt size={14} />
+            </button>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
-          {event.location && <span style={factChipStyle}>📍 {event.location}</span>}
+          {event.location && (
+            <span style={factChipStyle}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <FaLocationDot size={14} />
+                <span>{event.location}</span>
+              </span>
+            </span>
+          )}
           {duration !== null && <span style={factChipStyle}>⏱ {duration}h</span>}
-          {attendees.length > 0 && <span style={factChipStyle}>👥 {attendees.length} attending</span>}
+          {attendees.length > 0 && (
+            <span style={factChipStyle}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <PiUsersBold size={14} />
+                <span>{attendees.length} attending</span>
+              </span>
+            </span>
+          )}
         </div>
 
         {(event.provider || event.confirmationCode) && (
@@ -321,7 +347,10 @@ export function EventDetail({
         {budgetItem ? (
           <div style={{ background: "var(--color-bg-muted)", borderRadius: "var(--radius-md)", padding: "var(--space-md)" }}>
             <div className="flex items-center justify-between mb-3">
-              <p style={{ fontWeight: 600, fontSize: "var(--font-sm)" }}>💰 Cost</p>
+              <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <PiMoneyBold size={14} />
+                <span>Cost</span>
+              </p>
               <div className="flex gap-2">
                 {(budgetItem.splitType ?? "even") === "even" ? (
                   <Badge variant="accent">Even split</Badge>
@@ -436,10 +465,20 @@ export function EventDetail({
             <p style={{ fontWeight: 600, marginBottom: 8 }}>Linked Items</p>
             <div className="flex flex-wrap gap-2">
               {budgetItem && (
-                <button onClick={() => onNavigate("budget", budgetItem.id)} style={linkChipStyle}>💰 {budgetItem.title}</button>
+                <button onClick={() => onNavigate("budget", budgetItem.id)} style={linkChipStyle}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <PiMoneyBold size={14} />
+                    <span>{budgetItem.title}</span>
+                  </span>
+                </button>
               )}
               {relatedTasks.map((t) => (
-                <button key={t.id} onClick={() => onNavigate("task", t.id)} style={linkChipStyle}>✅ {t.title}</button>
+                <button key={t.id} onClick={() => onNavigate("task", t.id)} style={linkChipStyle}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <IoIosCheckboxOutline size={15} />
+                    <span>{t.title}</span>
+                  </span>
+                </button>
               ))}
             </div>
           </div>
@@ -529,13 +568,14 @@ const linkChipStyle: React.CSSProperties = {
 };
 
 const editBtnStyle: React.CSSProperties = {
-  padding: "6px 14px",
+  padding: "6px 10px",
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
-  fontSize: "var(--font-sm)",
-  fontWeight: 500,
   cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const saveBtnStyle: React.CSSProperties = {

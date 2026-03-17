@@ -10,7 +10,8 @@ import { PlanActivityForm } from "@/components/views/PlanActivityForm";
 import { useApp } from "@/lib/context";
 import { useAuth } from "@/lib/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useCallback, useState, useSyncExternalStore } from "react";
+import { type FormEvent, useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { HiOutlinePlus } from "react-icons/hi";
 
 function CreateTripModal({ onClose }: { onClose: () => void; }) {
   const { createTrip } = useApp();
@@ -180,8 +181,17 @@ export function AppShell() {
   );
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const app = useApp();
   const auth = useAuth();
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)");
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
@@ -471,7 +481,7 @@ export function AppShell() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <HeaderBar
           title={TAB_TITLES[activeTab] ?? "Dashboard"}
-          onAddItem={activeTab === "polls" ? undefined : handleAddItem}
+          onAddItem={activeTab === "polls" || activeTab === "moodboard" || activeTab === "guests" ? undefined : handleAddItem}
           onClearAll={app.clearAllData}
           onRestoreDemo={app.resetDemoData}
           onExportJSON={app.exportData}
@@ -510,6 +520,33 @@ export function AppShell() {
         {renderPanelContent()}
       </ContextPanel>
 
+      {isMobile && activeTab !== "polls" && activeTab !== "moodboard" && activeTab !== "guests" && !showPlanForm && (
+        <button
+          type="button"
+          aria-label="Add item"
+          onClick={handleAddItem}
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 84,
+            zIndex: 180,
+            width: 56,
+            height: 56,
+            borderRadius: "999px",
+            border: "none",
+            background: "var(--color-accent)",
+            color: "#fff",
+            boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <HiOutlinePlus size={24} />
+        </button>
+      )}
+
       {/* Create Trip modal */}
       {showCreateTrip && <CreateTripModal onClose={() => setShowCreateTrip(false)} />}
 
@@ -526,14 +563,15 @@ export function AppShell() {
             alignItems: "center",
             justifyContent: "center",
             backdropFilter: "blur(4px)",
+            padding: 12,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "min(680px, 90vw)",
-              maxHeight: "85vh",
-              overflowY: "auto",
+              width: "min(760px, 96vw)",
+              maxHeight: "92vh",
+              overflow: "hidden",
               borderRadius: "var(--radius-lg)",
             }}
           >
