@@ -124,6 +124,17 @@ export async function GET(request: Request) {
           );
         }
     }
+
+    // Ensure invited users are auto-claimed as soon as they complete login.
+    const { error: claimError } = await admin
+      .from("memberships")
+      .update({ account_status: "CLAIMED" })
+      .eq("user_id", user.id)
+      .neq("account_status", "CLAIMED");
+
+    if (claimError) {
+      console.error("[auth/callback] Failed to auto-claim memberships:", claimError.message);
+    }
   }
 
   // Redirect to the intended destination (preserves invite token redemption on /invite?token=...)

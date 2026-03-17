@@ -66,8 +66,9 @@ export function EventDetail({
       status: draft.status,
       startAt: draft.startAt ? new Date(draft.startAt).toISOString() : event.startAt,
       endAt: draft.endAt ? new Date(draft.endAt).toISOString() : undefined,
-      provider: draft.provider.trim() || undefined,
-      confirmationCode: draft.confirmationCode.trim() || undefined,
+      // Send explicit empty strings so PATCH clears DB values instead of skipping keys.
+      provider: draft.provider.trim(),
+      confirmationCode: draft.confirmationCode.trim(),
     });
     setEditing(false);
   };

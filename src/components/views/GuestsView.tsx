@@ -3,7 +3,7 @@
 import { Badge, EmptyState, accountStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
-import type { GuestFieldDef, AccountStatus, Membership, Role, User } from "@/lib/data";
+import type { AccountStatus, GuestFieldDef, Membership, Role, User } from "@/lib/data";
 import { useRef, useState } from "react";
 
 const FIELD_TYPES: { value: GuestFieldDef["type"]; label: string; }[] = [
@@ -258,9 +258,6 @@ function GuestTableRow({
         ))}
         <td style={{ ...cellSt, textAlign: "right", whiteSpace: "nowrap" }}>
           <div className="flex gap-1 justify-end">
-            {membership.accountStatus === "INVITED" && (
-              <button onClick={() => onStatusChange("CLAIMED")} style={{ padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-status-positive)", border: "none", fontSize: 11, cursor: "pointer", color: "#166534", fontWeight: 600 }}>Mark Claimed</button>
-            )}
             {canDelete && (
               <button
                 onClick={() => {
@@ -368,12 +365,14 @@ export function GuestsView() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Guests</h2>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowSchemaManager((v) => !v)}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: showSchemaManager ? "var(--color-bg-muted)" : "var(--color-bg-surface)", fontWeight: 500, cursor: "pointer", fontSize: "var(--font-sm)" }}
-          >
-            ⚙️ Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowSchemaManager((v) => !v)}
+              style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: showSchemaManager ? "var(--color-bg-muted)" : "var(--color-bg-surface)", fontWeight: 500, cursor: "pointer", fontSize: "var(--font-sm)" }}
+            >
+              ⚙️ Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}
+            </button>
+          )}
           {isAdmin && (
             <button
               onClick={() => { setShowAddForm((v) => !v); setAddError(null); }}
@@ -385,7 +384,7 @@ export function GuestsView() {
         </div>
       </div>
 
-      {showSchemaManager && (
+      {showSchemaManager && isAdmin && (
         <SchemaManager schema={guestFieldSchema} onAdd={addGuestField} onRemove={removeGuestField} onReorder={reorderGuestFields} onClose={() => setShowSchemaManager(false)} />
       )}
 

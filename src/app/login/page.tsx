@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -67,8 +68,9 @@ function LoginForm() {
       <div style={{ width: "min(480px, 100%)", background: "var(--color-bg-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 32 }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
+
           <div style={{ width: 56, height: 56, borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", fontWeight: 700, fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-            BP
+            <Image src={`/app-icon.png`} alt={"Bachelorette Party Planner Icon"} width={200} height={200} />
           </div>
           <h1 style={{ fontSize: "var(--font-2xl)", fontWeight: 700, marginBottom: 8 }}>Bachelorette Planner</h1>
           <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>

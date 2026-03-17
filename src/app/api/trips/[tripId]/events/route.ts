@@ -21,12 +21,7 @@ function toDbPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
     const dbKey = FIELD_MAP[key];
-    if (!dbKey) continue;
-    if (key === "status" && typeof value === "string") {
-      result[dbKey] = value === "CANCELED" ? "CANCELLED" : value;
-    } else {
-      result[dbKey] = value;
-    }
+    if (dbKey) result[dbKey] = value;
   }
   return result;
 }
@@ -38,10 +33,17 @@ export async function GET(
   const { tripId } = await params;
   if (isSupabase()) {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const { data, error } = await supabase.from("events").select("*").eq("trip_id", tripId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .eq("trip_id", tripId);
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   }
   const events = demoRepository.getEvents(tripId);
@@ -57,13 +59,24 @@ export async function POST(
 
   if (isSupabase()) {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const dbRow: Record<string, unknown> = { ...toDbPatch(body), trip_id: tripId };
+    const dbRow: Record<string, unknown> = {
+      ...toDbPatch(body),
+      trip_id: tripId,
+    };
     if (body.id) dbRow.id = body.id;
-    const { data, error } = await supabase.from("events").insert(dbRow).select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data, error } = await supabase
+      .from("events")
+      .insert(dbRow)
+      .select()
+      .single();
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data, { status: 201 });
   }
 
@@ -78,16 +91,25 @@ export async function PATCH(
   { params }: { params: Promise<{ tripId: string }> },
 ) {
   const { tripId } = await params;
-  const { id, patch } = (await request.json()) as { id: string; patch: Record<string, unknown> };
+  const { id, patch } = (await request.json()) as {
+    id: string;
+    patch: Record<string, unknown>;
+  };
 
   if (!id || !patch) {
-    return NextResponse.json({ error: "id and patch are required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "id and patch are required." },
+      { status: 400 },
+    );
   }
 
   if (isSupabase()) {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
     const dbPatch = toDbPatch(patch);
     const { data, error } = await supabase
@@ -97,7 +119,8 @@ export async function PATCH(
       .eq("trip_id", tripId)
       .select()
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   }
 
@@ -118,11 +141,19 @@ export async function DELETE(
 
   if (isSupabase()) {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const { error } = await supabase.from("events").delete().eq("id", id).eq("trip_id", tripId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const { error } = await supabase
+      .from("events")
+      .delete()
+      .eq("id", id)
+      .eq("trip_id", tripId);
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 

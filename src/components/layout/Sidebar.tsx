@@ -1,6 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/context";
+import Image from "next/image";
 import { useRef, useState, type ReactNode } from "react";
 import {
   HiOutlineCalendar,
@@ -24,12 +25,12 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { icon: <HiOutlineViewGrid size={22} />, label: "Dashboard", id: "dashboard" },
-  { icon: <HiOutlineCalendar size={22} />, label: "Events", id: "events" },
   { icon: <HiOutlineMap size={22} />, label: "Itinerary", id: "itinerary" },
-  { icon: <HiOutlineUsers size={22} />, label: "Guests", id: "guests" },
-  { icon: <HiOutlineCurrencyDollar size={22} />, label: "Budget", id: "budget" },
   { icon: <HiOutlineClipboardList size={22} />, label: "Tasks", id: "tasks" },
+  { icon: <HiOutlineCalendar size={22} />, label: "Events", id: "events" },
+  { icon: <HiOutlineCurrencyDollar size={22} />, label: "Budget", id: "budget" },
   { icon: <HiOutlineColorSwatch size={22} />, label: "Moodboard", id: "moodboard" },
+  { icon: <HiOutlineUsers size={22} />, label: "Guests", id: "guests" },
 ];
 
 interface SidebarProps {
@@ -43,8 +44,6 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: Sideba
   const { trip, availableTrips, switchTrip } = useApp();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
-
-  const currentInitial = (trip?.name ?? "BP").slice(0, 2).toUpperCase();
 
   return (
     <nav
@@ -75,7 +74,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: Sideba
           }}
           onClick={() => setSwitcherOpen((o) => !o)}
         >
-          {currentInitial}
+          <Image src={`/app-icon.png`} alt={trip?.name ?? "Bachelorette Party Planner Icon"} width={200} height={200} />
         </button>
 
         {/* Dropdown */}

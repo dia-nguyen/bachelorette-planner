@@ -1,3 +1,4 @@
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -72,4 +73,87 @@ export async function GET(
     photos: photosRes.data ?? [],
     profiles,
   });
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ tripId: string }> },
+) {
+  if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase") {
+    return NextResponse.json({ error: "Use demo mode data." }, { status: 400 });
+  }
+
+  const { tripId } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const { data: membership, error: memberErr } = await supabase
+    .from("memberships")
+    .select("role")
+    .eq("trip_id", tripId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const { data: tripOwnerRow, error: ownerErr } = await supabase
+    .from("trips")
+    .select("created_by")
+    .eq("id", tripId)
+    .maybeSingle();
+
+  const isAdminMember = !memberErr && membership?.role === "MOH_ADMIN";
+  const isTripOwner = !ownerErr && tripOwnerRow?.created_by === user.id;
+
+  if (!isAdminMember && !isTripOwner) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  let body: { guestFieldSchema?: unknown };
+  try {
+    body = (await request.json()) as { guestFieldSchema?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  if (!Array.isArray(body.guestFieldSchema)) {
+    return NextResponse.json({ error: "guestFieldSchema must be an array." }, { status: 400 });
+  }
+
+  const allowedTypes = new Set(["text", "tel", "number", "date", "textarea"]);
+  const normalizedSchema: Array<{ id: string; label: string; type: string }> = [];
+  for (const field of body.guestFieldSchema) {
+    if (!field || typeof field !== "object") {
+      return NextResponse.json({ error: "Each guest field must be an object." }, { status: 400 });
+    }
+    const typed = field as Record<string, unknown>;
+    const id = String(typed.id ?? "").trim();
+    const label = String(typed.label ?? "").trim();
+    const type = String(typed.type ?? "").trim();
+    if (!id || !label || !allowedTypes.has(type)) {
+      return NextResponse.json(
+        { error: "Each guest field must include valid id, label, and type." },
+        { status: 400 },
+      );
+    }
+    normalizedSchema.push({ id, label, type });
+  }
+
+  const admin = createAdminClient();
+  const { data: tripRow, error: updateError } = await admin
+    .from("trips")
+    .update({ guest_field_schema: normalizedSchema })
+    .eq("id", tripId)
+    .select("*")
+    .maybeSingle();
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, trip: tripRow });
 }

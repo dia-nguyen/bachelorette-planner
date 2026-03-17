@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { HiDotsHorizontal, HiOutlinePlus } from "react-icons/hi";
+import { HiOutlinePlus } from "react-icons/hi";
 
 interface HeaderBarProps {
   title: string;
@@ -64,7 +64,7 @@ export function HeaderBar({
 
         {/* More menu */}
         <div ref={menuRef} style={{ position: "relative" }}>
-          <button
+          {/* <button
             onClick={() => setMenuOpen((o) => !o)}
             className="flex items-center justify-center"
             style={{
@@ -78,7 +78,7 @@ export function HeaderBar({
             }}
           >
             <HiDotsHorizontal size={16} />
-          </button>
+          </button> */}
 
           {menuOpen && (
             <div
