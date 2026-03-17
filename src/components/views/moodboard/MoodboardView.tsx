@@ -2,6 +2,8 @@
 
 import { useApp } from "@/lib/context";
 import type { MoodboardNote, StickyNoteColor } from "@/lib/data/types";
+import { CANVAS_IMAGE_TITLE } from "@/lib/moodboard/display";
+import { normalizeNoteImage, optimizePastedImage } from "@/lib/moodboard/images";
 import {
   useCallback,
   useEffect,
@@ -18,6 +20,8 @@ const MAX_SCALE = 2;
 const ZOOM_SENSITIVITY = 0.0009;
 const MIN_ZOOM_STEP = 0.02;
 const MAX_ZOOM_STEP = 0.08;
+const DEFAULT_PASTED_NOTE_WIDTH = 320;
+const DEFAULT_PASTED_NOTE_HEIGHT = 280;
 
 const NOTE_COLORS: StickyNoteColor[] = [
   "yellow",
@@ -43,6 +47,8 @@ export function MoodboardView() {
   const [offset, setOffset] = useState({ x: -CANVAS_SIZE / 2 + 400, y: -CANVAS_SIZE / 2 + 300 });
   const [scale, setScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
+  const [isPastingImage, setIsPastingImage] = useState(false);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +122,7 @@ export function MoodboardView() {
       if (clickedNote) return;
       if (e.button !== 0 && e.button !== 1) return;
       e.preventDefault();
+      viewportRef.current?.focus();
       setIsPanning(true);
       panStart.current = {
         x: e.clientX,
@@ -179,23 +186,33 @@ export function MoodboardView() {
     [scale],
   );
 
+  const getViewportCenterCanvasPoint = useCallback(() => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 : 400;
+    const cy = rect ? rect.height / 2 : 300;
+
+    return {
+      x: (cx - offset.x) / scale,
+      y: (cy - offset.y) / scale,
+    };
+  }, [offset.x, offset.y, scale]);
+
+  const getNextZIndex = useCallback(
+    () =>
+      moodboardNotes.length > 0
+        ? Math.max(...moodboardNotes.map((note) => note.zIndex)) + 1
+        : 1,
+    [moodboardNotes],
+  );
+
   // ---- Add note ----
   const handleAddNote = useCallback(
     (color: StickyNoteColor = "yellow") => {
-      const rect = viewportRef.current?.getBoundingClientRect();
-      // Place new note near center of current viewport
-      const cx = rect ? rect.width / 2 : 400;
-      const cy = rect ? rect.height / 2 : 300;
-      const canvasX = (cx - offset.x) / scale;
-      const canvasY = (cy - offset.y) / scale;
+      const center = getViewportCenterCanvasPoint();
 
       // Slight random jitter so notes don't stack perfectly
       const jitterX = (Math.random() - 0.5) * 60;
       const jitterY = (Math.random() - 0.5) * 60;
-
-      const maxZ = moodboardNotes.length > 0
-        ? Math.max(...moodboardNotes.map((n) => n.zIndex))
-        : 0;
 
       pushUndo();
       addMoodboardNote({
@@ -203,17 +220,98 @@ export function MoodboardView() {
         text: "",
         images: [],
         color,
-        x: canvasX + jitterX,
-        y: canvasY + jitterY,
+        x: center.x + jitterX,
+        y: center.y + jitterY,
         width: 260,
         height: 200,
-        zIndex: maxZ + 1,
+        zIndex: getNextZIndex(),
         createdByUserId: currentUserId,
         updatedAt: new Date().toISOString(),
       });
     },
-    [offset, scale, moodboardNotes, addMoodboardNote, currentUserId, pushUndo],
+    [addMoodboardNote, currentUserId, getNextZIndex, getViewportCenterCanvasPoint, pushUndo],
   );
+
+  const handleCanvasPasteImage = useCallback(
+    async (file: File) => {
+      const center = getViewportCenterCanvasPoint();
+      const noteX = center.x - DEFAULT_PASTED_NOTE_WIDTH / 2;
+      const noteY = center.y - DEFAULT_PASTED_NOTE_HEIGHT / 2;
+
+      pushUndo();
+      setIsPastingImage(true);
+      setPasteError(null);
+
+      const noteId = addMoodboardNote({
+        title: CANVAS_IMAGE_TITLE,
+        text: "",
+        images: [],
+        color: "yellow",
+        x: noteX,
+        y: noteY,
+        width: DEFAULT_PASTED_NOTE_WIDTH,
+        height: DEFAULT_PASTED_NOTE_HEIGHT,
+        zIndex: getNextZIndex(),
+        createdByUserId: currentUserId,
+        updatedAt: new Date().toISOString(),
+      });
+
+      try {
+        const uploadFile = await optimizePastedImage(file);
+        const uploadedImage = await uploadMoodboardImage(noteId, uploadFile);
+        const positionedImage = normalizeNoteImage(
+          uploadedImage,
+          0,
+          DEFAULT_PASTED_NOTE_WIDTH,
+        );
+
+        updateMoodboardNote(noteId, {
+          images: [positionedImage],
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("[MoodboardView] Failed to paste image on canvas:", error);
+        deleteMoodboardNote(noteId);
+        setPasteError("Image paste failed.");
+      } finally {
+        setIsPastingImage(false);
+      }
+    },
+    [
+      addMoodboardNote,
+      currentUserId,
+      deleteMoodboardNote,
+      getNextZIndex,
+      getViewportCenterCanvasPoint,
+      pushUndo,
+      updateMoodboardNote,
+      uploadMoodboardImage,
+    ],
+  );
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (
+        activeElement?.closest("[data-sticky-note='true']") &&
+        activeElement.matches("input, textarea, [contenteditable='true']")
+      ) {
+        return;
+      }
+
+      const file = Array.from(event.clipboardData?.items ?? [])
+        .find((item) => item.type.startsWith("image/"))
+        ?.getAsFile();
+
+      if (!file) return;
+
+      event.preventDefault();
+      void handleCanvasPasteImage(file);
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [handleCanvasPasteImage]);
 
   // ---- Bring to front ----
   const handleBringToFront = useCallback(
@@ -444,6 +542,25 @@ export function MoodboardView() {
         >
           Reset
         </button>
+
+        <div
+          style={{
+            width: 1,
+            height: 20,
+            background: "#E5E7EB",
+            margin: "0 4px",
+          }}
+        />
+
+        <span
+          style={{
+            fontSize: 11,
+            color: pasteError ? "#B91C1C" : "#6B7280",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {isPastingImage ? "Pasting image..." : pasteError ?? "Paste images on the canvas"}
+        </span>
       </div>
 
       {/* Note count indicator */}
@@ -467,6 +584,7 @@ export function MoodboardView() {
       {/* Canvas viewport */}
       <div
         ref={viewportRef}
+        tabIndex={0}
         onPointerDown={handlePanStart}
         onPointerMove={handlePanMove}
         onPointerUp={handlePanEnd}
@@ -476,6 +594,7 @@ export function MoodboardView() {
           height: "100%",
           cursor: isPanning ? "grabbing" : "grab",
           overflow: "hidden",
+          outline: "none",
         }}
       >
         {/* Transformed canvas layer */}
@@ -526,7 +645,7 @@ export function MoodboardView() {
           <div style={{ fontSize: 13 }}>
             Click a colored button above to add your first sticky note.
             <br />
-            Drag the canvas to pan, scroll to zoom.
+            Drag the canvas to pan, scroll to zoom, or paste an image.
           </div>
         </div>
       )}

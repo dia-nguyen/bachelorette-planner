@@ -107,6 +107,67 @@ function CreateTripModal({ onClose }: { onClose: () => void; }) {
   );
 }
 
+function LoadingState() {
+  return (
+    <div className="flex items-center justify-center" style={{ minHeight: "60vh", padding: "24px" }}>
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "18px",
+          padding: "28px 32px",
+          borderRadius: "var(--radius-lg)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(249,245,255,0.98) 100%)",
+          boxShadow: "var(--shadow-2)",
+          border: "1px solid rgba(167, 139, 250, 0.18)",
+        }}
+      >
+        <div style={{ display: "grid", gap: 12, justifyItems: "center" }}>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "relative",
+              width: 88,
+              height: 88,
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <div className="app-loading-halo" />
+            <div className="app-loading-ring" />
+            <div
+              className="app-loading-core"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: "999px",
+                background: "radial-gradient(circle at 30% 30%, #ffffff 0%, #ddd6fe 45%, #a78bfa 100%)",
+                boxShadow: "0 10px 24px rgba(167, 139, 250, 0.35)",
+              }}
+            />
+          </div>
+          <div aria-hidden="true" className="app-loading-dots">
+            <span className="app-loading-dot app-loading-dot-one" />
+            <span className="app-loading-dot app-loading-dot-two" />
+            <span className="app-loading-dot app-loading-dot-three" />
+          </div>
+        </div>
+        <div style={{ display: "grid", gap: 4, textAlign: "center" }}>
+          <p style={{ margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--color-text-primary)" }}>
+            Getting the party plans ready
+          </p>
+          <p style={{ margin: 0, fontSize: "var(--font-md)", color: "var(--color-text-secondary)" }}>
+            One sec while we fluff the details.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -422,7 +483,7 @@ export function AppShell() {
           style={{ background: "var(--color-bg-surface)" }}
         >
           {showLoadingState ? (
-            <div className="flex items-center justify-center" style={{ height: "60vh", color: "var(--color-text-secondary)", fontSize: "var(--font-md)" }}>Loading…</div>
+            <LoadingState />
           ) : (
             <>
               {activeTab === "dashboard" && <DashboardView />}

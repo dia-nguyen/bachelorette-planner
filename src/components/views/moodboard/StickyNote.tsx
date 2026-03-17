@@ -5,12 +5,14 @@ import type {
   NoteImage as NoteImageType,
   StickyNoteColor,
 } from "@/lib/data/types";
+import { isCanvasImageNote } from "@/lib/moodboard/display";
 import {
   getNoteImageStageWidth,
   normalizeNoteImage,
   normalizeNoteImages,
   NOTE_IMAGE_GAP,
   NOTE_IMAGE_MIN_WIDTH,
+  optimizePastedImage,
 } from "@/lib/moodboard/images";
 import {
   useCallback,
@@ -78,6 +80,8 @@ export function StickyNote({
   const latestDraftTextRef = useRef(note.text);
 
   const stageWidth = useMemo(() => getNoteImageStageWidth(note.width), [note.width]);
+  const isCanvasImage = useMemo(() => isCanvasImageNote(note), [note]);
+  const interactiveStageWidth = isCanvasImage ? note.width : stageWidth;
   const normalizedImages = useMemo(
     () => normalizeNoteImages(note.images ?? [], note.width),
     [note.images, note.width],
@@ -104,12 +108,14 @@ export function StickyNote({
   }, [normalizedImages, selectedImageId]);
 
   useEffect(() => {
+    if (isCanvasImage) return;
     setDraftTitle(note.title);
-  }, [note.id, note.title]);
+  }, [isCanvasImage, note.id, note.title]);
 
   useEffect(() => {
+    if (isCanvasImage) return;
     setDraftText(note.text);
-  }, [note.id, note.text]);
+  }, [isCanvasImage, note.id, note.text]);
 
   useEffect(() => {
     latestDraftTitleRef.current = draftTitle;
@@ -121,6 +127,7 @@ export function StickyNote({
 
   const flushTitleSave = useCallback(
     (value: string) => {
+      if (isCanvasImage) return;
       if (titleSaveTimeoutRef.current) {
         window.clearTimeout(titleSaveTimeoutRef.current);
         titleSaveTimeoutRef.current = null;
@@ -130,11 +137,12 @@ export function StickyNote({
         onUpdate(note.id, { title: value });
       }
     },
-    [note.id, note.title, onUpdate],
+    [isCanvasImage, note.id, note.title, onUpdate],
   );
 
   const flushTextSave = useCallback(
     (value: string) => {
+      if (isCanvasImage) return;
       if (textSaveTimeoutRef.current) {
         window.clearTimeout(textSaveTimeoutRef.current);
         textSaveTimeoutRef.current = null;
@@ -144,10 +152,11 @@ export function StickyNote({
         onUpdate(note.id, { text: value });
       }
     },
-    [note.id, note.text, onUpdate],
+    [isCanvasImage, note.id, note.text, onUpdate],
   );
 
   useEffect(() => {
+    if (isCanvasImage) return;
     if (draftTitle === note.title) return;
 
     titleSaveTimeoutRef.current = window.setTimeout(() => {
@@ -160,9 +169,10 @@ export function StickyNote({
         titleSaveTimeoutRef.current = null;
       }
     };
-  }, [draftTitle, flushTitleSave, note.title]);
+  }, [draftTitle, flushTitleSave, isCanvasImage, note.title]);
 
   useEffect(() => {
+    if (isCanvasImage) return;
     if (draftText === note.text) return;
 
     textSaveTimeoutRef.current = window.setTimeout(() => {
@@ -175,7 +185,7 @@ export function StickyNote({
         textSaveTimeoutRef.current = null;
       }
     };
-  }, [draftText, flushTextSave, note.text]);
+  }, [draftText, flushTextSave, isCanvasImage, note.text]);
 
   useEffect(() => () => {
     flushTitleSave(latestDraftTitleRef.current);
@@ -297,6 +307,10 @@ export function StickyNote({
 
   const handlePaste = useCallback(
     (e: ClipboardEvent) => {
+      if (e.target !== textareaRef.current || document.activeElement !== textareaRef.current) {
+        return;
+      }
+
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -307,44 +321,12 @@ export function StickyNote({
         const file = item.getAsFile();
         if (!file) return;
 
-        const MAX_DIM = 1600;
-        const JPEG_QUALITY = 0.8;
-        const img = new Image();
-        const objectUrl = URL.createObjectURL(file);
-
-        img.onload = async () => {
-          URL.revokeObjectURL(objectUrl);
-
-          let { width, height } = img;
-          if (width > MAX_DIM || height > MAX_DIM) {
-            const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
-            width = Math.round(width * ratio);
-            height = Math.round(height * ratio);
-          }
-
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return;
-          ctx.drawImage(img, 0, 0, width, height);
-
-          const isPng = file.type === "image/png";
-          const outputType = isPng ? "image/png" : "image/jpeg";
-          const blob = await new Promise<Blob | null>((resolve) => {
-            canvas.toBlob(resolve, outputType, isPng ? undefined : JPEG_QUALITY);
-          });
-
-          if (!blob) return;
-
+        void (async () => {
           setIsUploadingImage(true);
           setUploadError(null);
 
           try {
-            const extension = outputType === "image/png" ? "png" : "jpg";
-            const uploadFile = new File([blob], `moodboard.${extension}`, {
-              type: outputType,
-            });
+            const uploadFile = await optimizePastedImage(file);
             const uploadedImage = await onUploadImage(note.id, uploadFile);
             const positionedImage = normalizeNoteImage(
               uploadedImage,
@@ -360,9 +342,7 @@ export function StickyNote({
           } finally {
             setIsUploadingImage(false);
           }
-        };
-
-        img.src = objectUrl;
+        })();
         return;
       }
     },
@@ -370,10 +350,10 @@ export function StickyNote({
   );
 
   useEffect(() => {
-    const el = noteRef.current;
-    if (!el) return;
-    el.addEventListener("paste", handlePaste);
-    return () => el.removeEventListener("paste", handlePaste);
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.addEventListener("paste", handlePaste);
+    return () => textarea.removeEventListener("paste", handlePaste);
   }, [handlePaste]);
 
   useEffect(() => {
@@ -385,11 +365,16 @@ export function StickyNote({
 
   const handleRemoveImage = useCallback(
     (imgId: string) => {
+      if (isCanvasImage && normalizedImages.length === 1) {
+        onDelete(note.id);
+        return;
+      }
+
       onUpdate(note.id, {
         images: normalizedImages.filter((image) => image.id !== imgId),
       });
     },
-    [normalizedImages, note.id, onUpdate],
+    [isCanvasImage, normalizedImages, note.id, onDelete, onUpdate],
   );
 
   const handleChangeImage = useCallback(
@@ -430,124 +415,130 @@ export function StickyNote({
         width: note.width,
         height: note.height,
         zIndex: note.zIndex,
-        background: bg,
-        borderLeft: `4px solid ${border}`,
+        background: isCanvasImage ? "transparent" : bg,
+        borderLeft: isCanvasImage ? "none" : `4px solid ${border}`,
         borderRadius: "6px",
         boxShadow: isDragging
           ? "0 8px 32px rgba(0,0,0,0.18)"
-          : "0 2px 8px rgba(0,0,0,0.08)",
+          : isCanvasImage
+            ? "none"
+            : "0 2px 8px rgba(0,0,0,0.08)",
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        overflow: isCanvasImage ? "visible" : "hidden",
         cursor: isDragging ? "grabbing" : "grab",
         userSelect: isDragging ? "none" : "auto",
         transition: isDragging ? "none" : "box-shadow 0.2s",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "6px 8px 2px 8px",
-          gap: 4,
-        }}
-      >
-        <input
-          value={draftTitle}
-          onBlur={(e) => flushTitleSave(e.target.value)}
-          onChange={(e) => setDraftTitle(e.target.value)}
-          placeholder="Title"
+      {!isCanvasImage && (
+        <div
           style={{
-            flex: 1,
-            background: "transparent",
-            border: "none",
-            fontWeight: 600,
-            fontSize: 14,
-            color: "#1F2937",
-            outline: "none",
-            padding: "2px 0",
-          }}
-        />
-
-        <div style={{ display: "flex", gap: 2 }}>
-          {(Object.keys(COLOR_MAP) as StickyNoteColor[]).map((color) => (
-            <button
-              key={color}
-              onClick={() => onUpdate(note.id, { color })}
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: "50%",
-                background: COLOR_MAP[color],
-                border:
-                  color === note.color
-                    ? `2px solid ${COLOR_BORDER[color]}`
-                    : "1px solid #D1D5DB",
-                cursor: "pointer",
-                padding: 0,
-              }}
-            />
-          ))}
-        </div>
-
-        <button
-          onClick={() => onDelete(note.id)}
-          title="Delete note"
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontSize: 16,
-            lineHeight: 1,
-            color: "#9CA3AF",
-            padding: "0 2px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "6px 8px 2px 8px",
+            gap: 4,
           }}
         >
-          ×
-        </button>
-      </div>
+          <input
+            value={draftTitle}
+            onBlur={(e) => flushTitleSave(e.target.value)}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="Title"
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              fontWeight: 600,
+              fontSize: 14,
+              color: "#1F2937",
+              outline: "none",
+              padding: "2px 0",
+            }}
+          />
+
+          <div style={{ display: "flex", gap: 2 }}>
+            {(Object.keys(COLOR_MAP) as StickyNoteColor[]).map((color) => (
+              <button
+                key={color}
+                onClick={() => onUpdate(note.id, { color })}
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: "50%",
+                  background: COLOR_MAP[color],
+                  border:
+                    color === note.color
+                      ? `2px solid ${COLOR_BORDER[color]}`
+                      : "1px solid #D1D5DB",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              />
+            ))}
+          </div>
+
+          <button
+            onClick={() => onDelete(note.id)}
+            title="Delete note"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 16,
+              lineHeight: 1,
+              color: "#9CA3AF",
+              padding: "0 2px",
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div
         style={{
           flex: 1,
           minHeight: 0,
-          overflowY: "auto",
+          overflowY: isCanvasImage ? "visible" : "auto",
           overflowX: "hidden",
-          paddingBottom: 8,
+          paddingBottom: isCanvasImage ? 0 : 8,
         }}
       >
-        <textarea
-          ref={textareaRef}
-          value={draftText}
-          onBlur={(e) => flushTextSave(e.target.value)}
-          onChange={(e) => {
-            setDraftText(e.target.value);
-            e.target.style.height = "auto";
-            e.target.style.height = e.target.scrollHeight + "px";
-          }}
-          placeholder="Write something... (paste images here)"
-          style={{
-            flex: "0 0 auto",
-            minHeight: 40,
-            background: "transparent",
-            border: "none",
-            resize: "vertical",
-            fontSize: 13,
-            color: "#374151",
-            outline: "none",
-            padding: "4px 8px",
-            lineHeight: 1.5,
-            fontFamily: "inherit",
-            overflow: "hidden",
-            width: "100%",
-          }}
-        />
+        {!isCanvasImage && (
+          <textarea
+            ref={textareaRef}
+            value={draftText}
+            onBlur={(e) => flushTextSave(e.target.value)}
+            onChange={(e) => {
+              setDraftText(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = e.target.scrollHeight + "px";
+            }}
+            placeholder="Write something... (paste images here)"
+            style={{
+              flex: "0 0 auto",
+              minHeight: 40,
+              background: "transparent",
+              border: "none",
+              resize: "vertical",
+              fontSize: 13,
+              color: "#374151",
+              outline: "none",
+              padding: "4px 8px",
+              lineHeight: 1.5,
+              fontFamily: "inherit",
+              overflow: "hidden",
+              width: "100%",
+            }}
+          />
+        )}
 
         {(isUploadingImage || uploadError) && (
           <div
             style={{
-              padding: "0 8px 6px",
+              padding: isCanvasImage ? "0 0 6px" : "0 8px 6px",
               fontSize: 11,
               color: uploadError ? "#B91C1C" : "#6B7280",
             }}
@@ -556,17 +547,68 @@ export function StickyNote({
           </div>
         )}
 
-        {normalizedImages.length > 0 && (
-          <div style={{ padding: "0 8px 8px" }}>
+        {isCanvasImage && normalizedImages[0] && (
+          <div
+            style={{
+              position: "relative",
+              width: note.width,
+              height: note.height,
+            }}
+          >
+            <img
+              src={normalizedImages[0].dataUrl}
+              alt="Canvas item"
+              draggable={false}
+              style={{
+                display: "block",
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                userSelect: "none",
+                pointerEvents: "none",
+                borderRadius: 6,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+              }}
+            />
+
+            <button
+              onClick={() => onDelete(note.id)}
+              title="Delete image"
+              style={{
+                position: "absolute",
+                top: 6,
+                right: 6,
+                background: "rgba(0,0,0,0.6)",
+                color: "#fff",
+                border: "none",
+                borderRadius: "50%",
+                width: 22,
+                height: 22,
+                fontSize: 14,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {!isCanvasImage && normalizedImages.length > 0 && (
+          <div style={{ padding: isCanvasImage ? 0 : "0 8px 8px" }}>
             <div
               style={{
                 position: "relative",
-                width: stageWidth,
-                minHeight: imageStageHeight,
+                width: interactiveStageWidth,
+                minHeight: isCanvasImage ? note.height : imageStageHeight,
                 borderRadius: 6,
-                background: "rgba(255,255,255,0.28)",
-                border: "1px dashed rgba(0,0,0,0.08)",
-                overflow: "hidden",
+                background: isCanvasImage ? "transparent" : "rgba(255,255,255,0.28)",
+                border: isCanvasImage ? "none" : "1px dashed rgba(0,0,0,0.08)",
+                overflow: isCanvasImage ? "visible" : "hidden",
               }}
             >
               {normalizedImages.map((image) => (
@@ -576,7 +618,7 @@ export function StickyNote({
                   isSelected={selectedImageId === image.id}
                   borderColor={border}
                   canvasScale={canvasScale}
-                  stageWidth={stageWidth}
+                  stageWidth={interactiveStageWidth}
                   onRemove={handleRemoveImage}
                   onChange={handleChangeImage}
                   onImageRatioChange={handleImageRatioChange}

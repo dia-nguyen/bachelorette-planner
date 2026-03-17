@@ -47,8 +47,8 @@ export function HeaderBar({
       }}
     >
       <h1
+        className="app-header-title"
         style={{
-          fontSize: "var(--font-xl)",
           fontWeight: 700,
           color: "var(--color-text-primary)",
           margin: 0,

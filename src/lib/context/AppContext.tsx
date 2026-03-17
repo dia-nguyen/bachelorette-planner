@@ -188,7 +188,7 @@ interface AppContextValue {
 
   // Moodboard
   moodboardNotes: MoodboardNote[];
-  addMoodboardNote: (data: Omit<MoodboardNote, "id" | "tripId">) => void;
+  addMoodboardNote: (data: Omit<MoodboardNote, "id" | "tripId">) => string;
   updateMoodboardNote: (id: string, patch: Partial<MoodboardNote>) => void;
   deleteMoodboardNote: (id: string) => void;
   setMoodboardNotes: (notes: MoodboardNote[]) => void;
@@ -1181,8 +1181,9 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   // Moodboard
   const addMoodboardNote = useCallback(
     (data: Omit<MoodboardNote, "id" | "tripId">) => {
+      const id = uuid();
+
       if (isSupabaseMode && activeTripId) {
-        const id = uuid();
         const newNote: MoodboardNote = { ...data, id, tripId: activeTripId };
         setSupabaseMoodboardNotes((prev) => [...prev, newNote]);
         void queueMoodboardRequest(id, async () => {
@@ -1197,15 +1198,24 @@ export function AppProvider({ children }: { children: ReactNode; }) {
           }
 
           setSupabaseMoodboardNotes((prev) =>
-            prev.map((note) => (note.id === id ? { ...note, ...payload } : note)),
+            prev.map((note) =>
+              note.id === id
+                ? {
+                  ...payload,
+                  ...note,
+                  createdByUserId: payload.createdByUserId || note.createdByUserId,
+                }
+                : note,
+            ),
           );
         }).catch((error) => {
           console.error("[AppContext] Failed to create moodboard note:", error);
           setSupabaseMoodboardNotes((prev) => prev.filter((note) => note.id !== id));
         });
-        return;
+        return id;
       }
-      repo.addMoodboardNote({ ...data, id: uuid(), tripId: effectiveTripId });
+      repo.addMoodboardNote({ ...data, id, tripId: effectiveTripId });
+      return id;
     },
     [activeTripId, effectiveTripId, isSupabaseMode, queueMoodboardRequest]
   );
@@ -1292,28 +1302,37 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         formData.set("imageId", imageId);
         formData.set("noteId", noteId);
         formData.set("file", file);
+        let uploadedImage: NoteImage | null = null;
 
-        const res = await fetch(`/api/trips/${activeTripId}/moodboard/images`, {
-          method: "POST",
-          body: formData,
+        await queueMoodboardRequest(noteId, async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/moodboard/images`, {
+            method: "POST",
+            body: formData,
+          });
+          const payload = (await res.json()) as {
+            id?: string;
+            url?: string;
+            error?: string;
+          };
+
+          if (!res.ok || !payload.id || !payload.url) {
+            throw new Error(payload.error ?? "Failed to upload moodboard image.");
+          }
+
+          uploadedImage = {
+            id: payload.id,
+            dataUrl: payload.url,
+            width: null,
+            x: 0,
+            y: 0,
+          };
         });
-        const payload = (await res.json()) as {
-          id?: string;
-          url?: string;
-          error?: string;
-        };
 
-        if (!res.ok || !payload.id || !payload.url) {
-          throw new Error(payload.error ?? "Failed to upload moodboard image.");
+        if (!uploadedImage) {
+          throw new Error("Failed to upload moodboard image.");
         }
 
-        return {
-          id: payload.id,
-          dataUrl: payload.url,
-          width: null,
-          x: 0,
-          y: 0,
-        };
+        return uploadedImage;
       }
 
       const dataUrl = await new Promise<string>((resolve, reject) => {

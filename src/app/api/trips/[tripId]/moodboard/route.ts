@@ -36,24 +36,35 @@ interface MoodboardImageRow {
 }
 
 function formatMoodboardErrorMessage(message: string) {
+  const lower = message.toLowerCase();
+
   if (
-    message.includes("moodboard_notes") ||
-    message.includes("moodboard_note_images")
+    lower.includes('relation "moodboard_notes" does not exist') ||
+    lower.includes('relation "moodboard_note_images" does not exist') ||
+    lower.includes("could not find the table 'public.moodboard_notes' in the schema cache") ||
+    lower.includes("could not find the table 'public.moodboard_note_images' in the schema cache")
   ) {
-    return "Moodboard tables are missing in Supabase. Run docs/schema.sql or docs/moodboard-tables.sql, then refresh.";
+    return `Moodboard tables are missing in the configured Supabase project, or the API schema cache has not picked them up yet. Run docs/schema.sql or docs/moodboard-tables.sql in the same project your app is pointed at, then refresh. Raw Supabase error: ${message}`;
   }
   if (
-    message.includes('column "x"') ||
-    message.includes('column "y"') ||
-    message.includes(".x") ||
-    message.includes(".y")
+    lower.includes('column "x" does not exist') ||
+    lower.includes('column "y" does not exist') ||
+    lower.includes("could not find the 'x' column") ||
+    lower.includes("could not find the 'y' column")
   ) {
-    return "Moodboard image position columns are missing in Supabase. Run the latest docs/schema.sql or the ALTER TABLE statements in docs/moodboard-tables.sql, then refresh.";
+    return `Moodboard image position columns are missing in Supabase. Run the latest docs/schema.sql or the ALTER TABLE statements in docs/moodboard-tables.sql, then refresh. Raw Supabase error: ${message}`;
   }
-  return message;
+  if (
+    lower.includes("row-level security") ||
+    lower.includes("permission denied")
+  ) {
+    return `Moodboard tables exist, but Supabase denied access. This usually means the project is missing moodboard RLS policies or the request is hitting the wrong project. Raw Supabase error: ${message}`;
+  }
+  return `Moodboard save failed. Raw Supabase error: ${message}`;
 }
 
 function jsonMoodboardError(message: string, status = 500) {
+  console.error("[moodboard] Supabase error:", message);
   return NextResponse.json(
     { error: formatMoodboardErrorMessage(message) },
     { status },
@@ -161,8 +172,9 @@ export async function GET(
 
   const memberCheck = await assertTripMember(supabase, tripId, user.id);
   if (memberCheck instanceof NextResponse) return memberCheck;
+  const admin = createAdminClient();
 
-  const { data: notes, error: notesError } = await supabase
+  const { data: notes, error: notesError } = await admin
     .from("moodboard_notes")
     .select("*")
     .eq("trip_id", tripId)
@@ -180,7 +192,7 @@ export async function GET(
   }
 
   const noteIds = notes.map((note) => note.id);
-  const { data: images, error: imagesError } = await supabase
+  const { data: images, error: imagesError } = await admin
     .from("moodboard_note_images")
     .select("*")
     .in("note_id", noteIds)
@@ -225,15 +237,17 @@ export async function POST(
 
   const memberCheck = await assertTripMember(supabase, tripId, user.id);
   if (memberCheck instanceof NextResponse) return memberCheck;
+  const admin = createAdminClient();
 
   const body = (await request.json()) as Partial<MoodboardNote>;
   const dbRow: Record<string, unknown> = {
     ...toDbPatch(body as Record<string, unknown>),
+    ...(typeof body.id === "string" && body.id ? { id: body.id } : {}),
     trip_id: tripId,
     created_by_user_id: user.id,
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from("moodboard_notes")
     .insert(dbRow)
     .select("*")
@@ -262,11 +276,27 @@ export async function PATCH(
 
   const memberCheck = await assertTripMember(supabase, tripId, user.id);
   if (memberCheck instanceof NextResponse) return memberCheck;
+  const admin = createAdminClient();
 
-  const { id, patch } = (await request.json()) as {
+  const rawBody = await request.text();
+  if (!rawBody.trim()) {
+    return jsonMoodboardError("Empty PATCH body for moodboard note update.", 400);
+  }
+
+  let parsedBody: {
     id: string;
     patch: Partial<MoodboardNote>;
   };
+  try {
+    parsedBody = JSON.parse(rawBody) as {
+      id: string;
+      patch: Partial<MoodboardNote>;
+    };
+  } catch {
+    return jsonMoodboardError("Invalid JSON in moodboard PATCH body.", 400);
+  }
+
+  const { id, patch } = parsedBody;
 
   if (!id || !patch) {
     return jsonMoodboardError("id and patch are required.", 400);
@@ -274,7 +304,7 @@ export async function PATCH(
 
   const dbPatch = toDbPatch(patch as Record<string, unknown>);
   if (Object.keys(dbPatch).length > 0) {
-    const { error } = await supabase
+    const { error } = await admin
       .from("moodboard_notes")
       .update(dbPatch)
       .eq("id", id)
@@ -287,7 +317,7 @@ export async function PATCH(
 
   if (Array.isArray(patch.images)) {
     const incomingImages = patch.images;
-    const { data: existingImages, error: existingImagesError } = await supabase
+    const { data: existingImages, error: existingImagesError } = await admin
       .from("moodboard_note_images")
       .select("id,note_id,storage_path,url,width,x,y,sort_order")
       .eq("note_id", id);
@@ -304,7 +334,7 @@ export async function PATCH(
     const removedImages = existingRows.filter((image) => !incomingIds.has(image.id));
 
     if (removedImages.length > 0) {
-      const { error: deleteImagesError } = await supabase
+      const { error: deleteImagesError } = await admin
         .from("moodboard_note_images")
         .delete()
         .in(
@@ -336,7 +366,7 @@ export async function PATCH(
         sort_order: index,
       }));
 
-      const { error: upsertError } = await supabase
+      const { error: upsertError } = await admin
         .from("moodboard_note_images")
         .upsert(upsertRows, { onConflict: "id" });
 
@@ -365,13 +395,14 @@ export async function DELETE(
 
   const memberCheck = await assertTripMember(supabase, tripId, user.id);
   if (memberCheck instanceof NextResponse) return memberCheck;
+  const admin = createAdminClient();
 
   const { id } = (await request.json()) as { id: string };
   if (!id) {
     return jsonMoodboardError("id is required.", 400);
   }
 
-  const { data: existingImages, error: existingImagesError } = await supabase
+  const { data: existingImages, error: existingImagesError } = await admin
     .from("moodboard_note_images")
     .select("storage_path")
     .eq("note_id", id);
@@ -380,7 +411,7 @@ export async function DELETE(
     return jsonMoodboardError(existingImagesError.message);
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from("moodboard_notes")
     .delete()
     .eq("id", id)
@@ -413,10 +444,11 @@ export async function PUT(
 
   const memberCheck = await assertTripMember(supabase, tripId, user.id);
   if (memberCheck instanceof NextResponse) return memberCheck;
+  const admin = createAdminClient();
 
   const notes = (await request.json()) as MoodboardNote[];
 
-  const { data: existingNotes, error: existingNotesError } = await supabase
+  const { data: existingNotes, error: existingNotesError } = await admin
     .from("moodboard_notes")
     .select("id")
     .eq("trip_id", tripId);
@@ -432,7 +464,7 @@ export async function PUT(
   let removedStoragePaths: string[] = [];
 
   if (existingNoteIds.length > 0) {
-    const { data: existingImages, error: existingImagesError } = await supabase
+    const { data: existingImages, error: existingImagesError } = await admin
       .from("moodboard_note_images")
       .select("storage_path")
       .in("note_id", existingNoteIds);
@@ -457,7 +489,7 @@ export async function PUT(
       .filter((path) => !retainedPaths.has(path));
   }
 
-  const { error: deleteNotesError } = await supabase
+  const { error: deleteNotesError } = await admin
     .from("moodboard_notes")
     .delete()
     .eq("trip_id", tripId);
@@ -489,7 +521,7 @@ export async function PUT(
     updated_at: note.updatedAt ?? new Date().toISOString(),
   }));
 
-  const { error: insertNotesError } = await supabase
+  const { error: insertNotesError } = await admin
     .from("moodboard_notes")
     .insert(noteRows);
 
@@ -502,7 +534,7 @@ export async function PUT(
 
   const imageRows = notes.flatMap((note) => toImageRows(note.id, note.images ?? []));
   if (imageRows.length > 0) {
-    const { error: insertImagesError } = await supabase
+    const { error: insertImagesError } = await admin
       .from("moodboard_note_images")
       .insert(imageRows);
 
