@@ -30,7 +30,7 @@ export async function GET(
     .from("memberships")
     .select("role")
     .eq("trip_id", tripId)
-    .eq("profile_id", user.id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (memberErr || membership?.role !== "MOH_ADMIN") {
@@ -78,7 +78,7 @@ export async function POST(
     .from("memberships")
     .select("role")
     .eq("trip_id", tripId)
-    .eq("profile_id", user.id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (memberErr || membership?.role !== "MOH_ADMIN") {
@@ -100,7 +100,7 @@ export async function POST(
   // Check if this person already has a membership (already joined)
   const admin = createAdminClient();
   const { data: existingProfile } = await admin
-    .from("profiles")
+    .from("users")
     .select("id")
     .eq("email", email)
     .maybeSingle();
@@ -110,8 +110,8 @@ export async function POST(
       .from("memberships")
       .select("id")
       .eq("trip_id", tripId)
-      .eq("profile_id", existingProfile.id)
-      .eq("invite_status", "ACCEPTED")
+      .eq("user_id", existingProfile.id)
+      .eq("account_status", "CLAIMED")
       .maybeSingle();
 
     if (existingMember) {

@@ -9,6 +9,8 @@ import {
   HiOutlineCog,
   HiOutlineColorSwatch,
   HiOutlineCurrencyDollar,
+  HiOutlineLogout,
+  HiOutlineMap,
   HiOutlinePlus,
   HiOutlineUsers,
   HiOutlineViewGrid,
@@ -23,6 +25,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: <HiOutlineViewGrid size={22} />, label: "Dashboard", id: "dashboard" },
   { icon: <HiOutlineCalendar size={22} />, label: "Events", id: "events" },
+  { icon: <HiOutlineMap size={22} />, label: "Itinerary", id: "itinerary" },
   { icon: <HiOutlineUsers size={22} />, label: "Guests", id: "guests" },
   { icon: <HiOutlineCurrencyDollar size={22} />, label: "Budget", id: "budget" },
   { icon: <HiOutlineClipboardList size={22} />, label: "Tasks", id: "tasks" },
@@ -33,9 +36,10 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onNewTrip?: () => void;
+  onSignOut?: () => void;
 }
 
-export function Sidebar({ activeTab, onTabChange, onNewTrip }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: SidebarProps) {
   const { trip, availableTrips, switchTrip } = useApp();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
@@ -194,6 +198,25 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip }: SidebarProps) {
       >
         <HiOutlineCog size={22} />
       </button>
+
+      {onSignOut && (
+        <button
+          title="Log Out"
+          onClick={onSignOut}
+          className="flex items-center justify-center transition-colors"
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: "var(--radius-md)",
+            background: "transparent",
+            color: "var(--color-text-secondary)",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          <HiOutlineLogout size={22} />
+        </button>
+      )}
     </nav>
   );
 }

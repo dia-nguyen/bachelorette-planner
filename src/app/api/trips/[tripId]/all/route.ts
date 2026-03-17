@@ -39,9 +39,9 @@ export async function GET(
   ]);
 
   // Gather member IDs from memberships + trip creator
-  // Support both schema variants: profile_id (new) and user_id (legacy)
+  // Support both schema variants: user_id (current) and profile_id (legacy)
   const memberIds = new Set(
-    (membershipsRes.data ?? []).map((m) => (m.profile_id ?? m.user_id) as string),
+    (membershipsRes.data ?? []).map((m) => (m.user_id ?? m.profile_id) as string),
   );
   if (tripRes.data?.created_by) {
     memberIds.add(tripRes.data.created_by);
@@ -49,22 +49,16 @@ export async function GET(
 
   let profiles: Record<string, unknown>[] = [];
   if (memberIds.size > 0) {
-    const ids = Array.from(memberIds);
-    // Try "profiles" table first, fall back to "users" table
-    let profilesRes = await supabase
-      .from("profiles")
-      .select("id,name,email,avatar_color,custom_fields")
-      .in("id", ids);
-    if (profilesRes.error || (profilesRes.data ?? []).length === 0) {
-      const usersRes = await supabase
-        .from("users")
-        .select("id,name,email,avatar_url,custom_fields")
-        .in("id", ids);
-      if (!usersRes.error) {
-        profilesRes = usersRes as typeof profilesRes;
-      }
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id,name,email,avatar_url,custom_fields")
+      .in("id", Array.from(memberIds));
+
+    if (usersError) {
+      return NextResponse.json({ error: usersError.message }, { status: 500 });
     }
-    profiles = (profilesRes.data ?? []) as Record<string, unknown>[];
+
+    profiles = (users ?? []) as Record<string, unknown>[];
   }
 
   return NextResponse.json({

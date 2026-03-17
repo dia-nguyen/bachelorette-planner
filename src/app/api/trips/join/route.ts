@@ -44,8 +44,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // Ensure the joining user has a profile row
-  await admin.from("profiles").upsert(
+  // Ensure the joining user has a users row
+  await admin.from("users").upsert(
     {
       id: user.id,
       email: user.email ?? "",
@@ -54,9 +54,6 @@ export async function POST(req: Request) {
         user.user_metadata?.name ??
         user.email?.split("@")[0] ??
         "Guest",
-      avatar_url:
-        user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null,
-      is_verified: true,
     },
     { onConflict: "id" },
   );
@@ -65,11 +62,11 @@ export async function POST(req: Request) {
   const { error: memberError } = await admin.from("memberships").upsert(
     {
       trip_id: trip.id,
-      profile_id: user.id,
-      role: "GUEST_PENDING",
-      invite_status: "ACCEPTED",
+      user_id: user.id,
+      role: "GUEST_CONFIRMED",
+      account_status: "CLAIMED",
     },
-    { onConflict: "trip_id,profile_id" },
+    { onConflict: "trip_id,user_id" },
   );
 
   if (memberError) {

@@ -4,6 +4,7 @@ import { useApp } from "@/lib/context";
 import type { MoodboardNote, StickyNoteColor } from "@/lib/data/types";
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -14,6 +15,9 @@ import { StickyNote } from "./StickyNote";
 const CANVAS_SIZE = 5000; // virtual canvas size
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 2;
+const ZOOM_SENSITIVITY = 0.0009;
+const MIN_ZOOM_STEP = 0.02;
+const MAX_ZOOM_STEP = 0.08;
 
 const NOTE_COLORS: StickyNoteColor[] = [
   "yellow",
@@ -30,6 +34,8 @@ export function MoodboardView() {
     addMoodboardNote,
     updateMoodboardNote,
     deleteMoodboardNote,
+    setMoodboardNotes,
+    uploadMoodboardImage,
     currentUserId,
   } = useApp();
 
@@ -40,11 +46,75 @@ export function MoodboardView() {
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const viewportRef = useRef<HTMLDivElement>(null);
 
+  // ---- Undo / Redo history ----
+  const undoStack = useRef<MoodboardNote[][]>([]);
+  const redoStack = useRef<MoodboardNote[][]>([]);
+  const lastSnapshot = useRef<string>("");
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Take a snapshot before a mutation
+  const pushUndo = useCallback(() => {
+    const snap = JSON.stringify(moodboardNotes);
+    if (snap !== lastSnapshot.current) {
+      undoStack.current.push(JSON.parse(lastSnapshot.current || snap));
+      redoStack.current = [];
+      if (undoStack.current.length > 50) undoStack.current.shift();
+      setCanUndo(true);
+      setCanRedo(false);
+    }
+    lastSnapshot.current = snap;
+  }, [moodboardNotes]);
+
+  // Keep lastSnapshot fresh on every render
+  useEffect(() => {
+    lastSnapshot.current = JSON.stringify(moodboardNotes);
+  }, [moodboardNotes]);
+
+  const undo = useCallback(() => {
+    if (undoStack.current.length === 0) return;
+    const prev = undoStack.current.pop()!;
+    redoStack.current.push(JSON.parse(JSON.stringify(moodboardNotes)));
+    setCanUndo(undoStack.current.length > 0);
+    setCanRedo(true);
+    setMoodboardNotes(prev);
+  }, [moodboardNotes, setMoodboardNotes]);
+
+  const redo = useCallback(() => {
+    if (redoStack.current.length === 0) return;
+    const next = redoStack.current.pop()!;
+    undoStack.current.push(JSON.parse(JSON.stringify(moodboardNotes)));
+    setCanUndo(true);
+    setCanRedo(redoStack.current.length > 0);
+    setMoodboardNotes(next);
+  }, [moodboardNotes, setMoodboardNotes]);
+
+  // Keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z (or Cmd on Mac)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (mod && e.key === "z" && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      } else if (mod && e.key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
+
   // ---- Pan ----
   const handlePanStart = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      // Only start pan on middle-click or direct canvas click (not on a note)
-      if (e.target !== e.currentTarget && e.button !== 1) return;
+      const target = e.target as HTMLElement;
+      const clickedNote = target.closest("[data-sticky-note='true']");
+      if (clickedNote) return;
+      if (e.button !== 0 && e.button !== 1) return;
       e.preventDefault();
       setIsPanning(true);
       panStart.current = {
@@ -53,7 +123,7 @@ export function MoodboardView() {
         ox: offset.x,
         oy: offset.y,
       };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
     [offset],
   );
@@ -79,6 +149,11 @@ export function MoodboardView() {
   // ---- Zoom (scroll wheel) ----
   const handleWheel = useCallback(
     (e: ReactWheelEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-sticky-note='true']")) {
+        return;
+      }
+
       e.preventDefault();
       const rect = viewportRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -86,7 +161,11 @@ export function MoodboardView() {
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      const step = Math.min(
+        MAX_ZOOM_STEP,
+        Math.max(MIN_ZOOM_STEP, Math.abs(e.deltaY) * ZOOM_SENSITIVITY),
+      );
+      const delta = e.deltaY > 0 ? -step : step;
       const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta));
 
       // Zoom toward cursor
@@ -118,10 +197,11 @@ export function MoodboardView() {
         ? Math.max(...moodboardNotes.map((n) => n.zIndex))
         : 0;
 
+      pushUndo();
       addMoodboardNote({
         title: "",
         text: "",
-        imageDataUrl: null,
+        images: [],
         color,
         x: canvasX + jitterX,
         y: canvasY + jitterY,
@@ -132,7 +212,7 @@ export function MoodboardView() {
         updatedAt: new Date().toISOString(),
       });
     },
-    [offset, scale, moodboardNotes, addMoodboardNote, currentUserId],
+    [offset, scale, moodboardNotes, addMoodboardNote, currentUserId, pushUndo],
   );
 
   // ---- Bring to front ----
@@ -149,15 +229,16 @@ export function MoodboardView() {
     [moodboardNotes, updateMoodboardNote],
   );
 
-  // ---- Update note ----
+  // ---- Update note (with undo snapshot) ----
   const handleUpdateNote = useCallback(
     (id: string, patch: Partial<MoodboardNote>) => {
+      pushUndo();
       updateMoodboardNote(id, {
         ...patch,
         updatedAt: new Date().toISOString(),
       });
     },
-    [updateMoodboardNote],
+    [updateMoodboardNote, pushUndo],
   );
 
   // ---- Zoom controls ----
@@ -232,6 +313,55 @@ export function MoodboardView() {
             +
           </button>
         ))}
+
+        <div
+          style={{
+            width: 1,
+            height: 20,
+            background: "#E5E7EB",
+            margin: "0 4px",
+          }}
+        />
+
+        {/* Undo / Redo */}
+        <button
+          onClick={undo}
+          title="Undo (Ctrl+Z)"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            border: "1px solid #D1D5DB",
+            background: "white",
+            cursor: "pointer",
+            fontSize: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: canUndo ? 1 : 0.35,
+          }}
+        >
+          ↩
+        </button>
+        <button
+          onClick={redo}
+          title="Redo (Ctrl+Shift+Z)"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            border: "1px solid #D1D5DB",
+            background: "white",
+            cursor: "pointer",
+            fontSize: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: canRedo ? 1 : 0.35,
+          }}
+        >
+          ↪
+        </button>
 
         <div
           style={{
@@ -334,7 +464,7 @@ export function MoodboardView() {
         style={{
           width: "100%",
           height: "100%",
-          cursor: isPanning ? "grabbing" : "default",
+          cursor: isPanning ? "grabbing" : "grab",
           overflow: "hidden",
         }}
       >
@@ -357,8 +487,9 @@ export function MoodboardView() {
               key={note.id}
               note={note}
               onUpdate={handleUpdateNote}
-              onDelete={deleteMoodboardNote}
+              onDelete={(id) => { pushUndo(); deleteMoodboardNote(id); }}
               onBringToFront={handleBringToFront}
+              onUploadImage={uploadMoodboardImage}
               canvasScale={scale}
             />
           ))}

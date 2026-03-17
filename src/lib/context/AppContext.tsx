@@ -5,6 +5,7 @@ import {
   clearAllData,
   exportStore,
   importStore,
+  type NoteImage,
   repository,
   resetStore,
   subscribe,
@@ -34,6 +35,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -43,6 +45,7 @@ import { v4 as uuid } from "uuid";
 const DEMO_TRIP_ID = "trip1";
 const DEMO_USER_ID = "u1"; // Sarah Kim (MOH_ADMIN)
 const repo = repository;
+const MOODBOARD_SAVE_DEBOUNCE_MS = 180;
 
 // ---- Supabase row → domain object mapper ----
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,6 +61,94 @@ function mapTripRow(row: any): Trip {
     joinCode: row.join_code ?? undefined,
     guestFieldSchema: (row.guest_field_schema ?? []) as GuestFieldDef[],
   };
+}
+
+function normalizeEventStatus(status: unknown): TripEvent["status"] {
+  if (status === "CANCELLED") return "CANCELED";
+  if (status === "CONFIRMED" || status === "PLANNED" || status === "CANCELED") {
+    return status;
+  }
+  return "DRAFT";
+}
+
+function normalizeBudgetCategory(category: unknown): BudgetItem["category"] {
+  if (category === "ACTIVITIES") return "ACTIVITY";
+  if (category === "FOOD_DRINK") return "RESTAURANT";
+  if (category === "OTHER") return "MISC";
+  if (
+    category === "ACTIVITY" ||
+    category === "DECORATION" ||
+    category === "RESTAURANT" ||
+    category === "ACCOMMODATION" ||
+    category === "TRANSPORT" ||
+    category === "OUTFIT" ||
+    category === "MISC"
+  ) {
+    return category;
+  }
+  return "MISC";
+}
+
+function normalizeBudgetStatus(status: unknown): BudgetItem["status"] {
+  if (status === "PAID") return "PURCHASED";
+  if (status === "CANCELLED") return "SETTLED";
+  if (
+    status === "PLANNED" ||
+    status === "PURCHASED" ||
+    status === "REIMBURSED" ||
+    status === "SETTLED"
+  ) {
+    return status;
+  }
+  return "PLANNED";
+}
+
+function roundCurrency(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+function computePerPersonEvenSplitAmountPatch(
+  items: BudgetItem[],
+  relatedEventId: string,
+  oldAttendeeCount: number,
+  newAttendeeCount: number
+): Array<{ id: string; plannedAmount: number; actualAmount: number; }> {
+  if (oldAttendeeCount === newAttendeeCount) return [];
+
+  return items
+    .filter((item) => item.relatedEventId === relatedEventId)
+    .filter((item) => (item.costMode ?? "total") === "per_person")
+    .filter((item) => (item.splitType ?? "even") === "even")
+    .map((item) => {
+      const plannedPerPerson = oldAttendeeCount > 0
+        ? item.plannedAmount / oldAttendeeCount
+        : item.plannedAmount;
+      const actualPerPerson = oldAttendeeCount > 0
+        ? item.actualAmount / oldAttendeeCount
+        : item.actualAmount;
+
+      return {
+        id: item.id,
+        plannedAmount: newAttendeeCount > 0
+          ? roundCurrency(plannedPerPerson * newAttendeeCount)
+          : roundCurrency(item.plannedAmount),
+        actualAmount: newAttendeeCount > 0
+          ? roundCurrency(actualPerPerson * newAttendeeCount)
+          : roundCurrency(item.actualAmount),
+      };
+    });
+}
+
+interface SupabaseTripDataPayload {
+  trip?: Record<string, unknown>;
+  memberships?: Array<Record<string, unknown>>;
+  profiles?: Array<Record<string, unknown>>;
+  events?: Array<Record<string, unknown>>;
+  tasks?: Array<Record<string, unknown>>;
+  budgetItems?: Array<Record<string, unknown>>;
+  checklistItems?: Array<Record<string, unknown>>;
+  polls?: Array<Record<string, unknown>>;
+  photos?: Array<Record<string, unknown>>;
 }
 
 interface AppContextValue {
@@ -92,10 +183,11 @@ interface AppContextValue {
   closePanel: () => void;
 
   // Mutations — guests
-  inviteUser: (name: string, email: string) => void;
+  inviteUser: (name: string, email: string) => Promise<void>;
   updateUser: (userId: string, patch: Partial<User>) => void;
   updateMembershipStatus: (userId: string, status: Membership["accountStatus"]) => void;
   updateMemberRole: (userId: string, role: Role) => void;
+  deleteGuest: (userId: string) => Promise<void>;
 
   // Mutations — events
   addEvent: (data: Omit<TripEvent, "id" | "tripId">) => void;
@@ -134,12 +226,14 @@ interface AppContextValue {
   addMoodboardNote: (data: Omit<MoodboardNote, "id" | "tripId">) => void;
   updateMoodboardNote: (id: string, patch: Partial<MoodboardNote>) => void;
   deleteMoodboardNote: (id: string) => void;
+  setMoodboardNotes: (notes: MoodboardNote[]) => void;
+  uploadMoodboardImage: (noteId: string, file: File) => Promise<NoteImage>;
 
   // Cross-entity creation helpers
   createTaskForBudgetItem: (budgetItemId: string) => void;
 
   // Unified "Plan Activity" — creates any combo of event/task/budget, all pre-linked
-  planActivity: (input: PlanActivityInput) => void;
+  planActivity: (input: PlanActivityInput) => Promise<void>;
 
   // Multi-trip
   availableTrips: Trip[];
@@ -189,13 +283,29 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const [supabaseChecklistItems, setSupabaseChecklistItems] = useState<ChecklistItem[]>([]);
   const [supabasePolls, setSupabasePolls] = useState<Poll[]>([]);
   const [supabasePhotos, setSupabasePhotos] = useState<Photo[]>([]);
+  const [supabaseMoodboardNotes, setSupabaseMoodboardNotes] = useState<MoodboardNote[]>([]);
+  const moodboardPatchTimeoutsRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const moodboardPatchBufferRef = useRef(new Map<string, Partial<MoodboardNote>>());
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
-  // Subscribe to repository changes (demo mode, and moodboard in all modes)
+  // Subscribe to repository changes in demo mode.
   useEffect(() => {
     return subscribe(refresh);
   }, [refresh]);
+
+  useEffect(() => {
+    const patchTimeouts = moodboardPatchTimeoutsRef.current;
+    const patchBuffer = moodboardPatchBufferRef.current;
+
+    return () => {
+      for (const timeout of patchTimeouts.values()) {
+        clearTimeout(timeout);
+      }
+      patchTimeouts.clear();
+      patchBuffer.clear();
+    };
+  }, []);
 
   // Effect 1: Load all trips the user belongs to or created (runs when user changes)
   useEffect(() => {
@@ -253,6 +363,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         setSupabaseChecklistItems([]);
         setSupabasePolls([]);
         setSupabasePhotos([]);
+        setSupabaseMoodboardNotes([]);
       }
       return;
     }
@@ -263,19 +374,39 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
     const run = async () => {
       try {
-        const res = await fetch(`/api/trips/${activeTripId}/all`);
+        const [res, moodboardRes] = await Promise.all([
+          fetch(`/api/trips/${activeTripId}/all`),
+          fetch(`/api/trips/${activeTripId}/moodboard`),
+        ]);
         if (isCancelled) return;
         if (!res.ok) throw new Error(`/api/trips/${activeTripId}/all returned ${res.status}`);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as Record<string, any>;
+        const [data, moodboardData] = await Promise.all([
+          res.json() as Promise<SupabaseTripDataPayload>,
+          moodboardRes.ok
+            ? (moodboardRes.json() as Promise<MoodboardNote[]>)
+            : Promise.resolve([] as MoodboardNote[]),
+        ]);
         if (isCancelled) return;
 
-        if (data.trip) {
-          setSupabaseTrip(mapTripRow(data.trip));
+        if (!moodboardRes.ok) {
+          console.warn(
+            `[AppContext] Moodboard load skipped for trip ${activeTripId}: ${moodboardRes.status}`,
+          );
         }
 
+        const tripRow =
+          data.trip && typeof data.trip === "object"
+            ? (data.trip as Record<string, unknown>)
+            : null;
+
+        if (tripRow) {
+          setSupabaseTrip(mapTripRow(tripRow));
+        }
+
+        const membershipRows = Array.isArray(data.memberships) ? data.memberships : [];
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mappedMemberships: Membership[] = (data.memberships ?? []).map((m: any) => ({
+        const mappedMemberships: Membership[] = membershipRows.map((m: any) => ({
           tripId: m.trip_id,
           userId: m.profile_id ?? m.user_id,
           role: m.role,
@@ -285,13 +416,16 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             : "INVITED",
         }));
 
+        const tripCreatedBy =
+          typeof tripRow?.created_by === "string" ? tripRow.created_by : null;
+
         if (
-          data.trip?.created_by &&
-          !mappedMemberships.some((m) => m.userId === data.trip.created_by)
+          tripCreatedBy &&
+          !mappedMemberships.some((m) => m.userId === tripCreatedBy)
         ) {
           mappedMemberships.unshift({
             tripId: activeTripId,
-            userId: data.trip.created_by,
+            userId: tripCreatedBy,
             role: "MOH_ADMIN",
             accountStatus: "CLAIMED",
           });
@@ -299,8 +433,10 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
         setSupabaseMemberships(mappedMemberships);
 
+        const profileRows = Array.isArray(data.profiles) ? data.profiles : [];
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mappedUsers: User[] = (data.profiles ?? []).map((p: any) => ({
+        const mappedUsers: User[] = profileRows.map((p: any) => ({
           id: p.id,
           name: p.name,
           email: p.email,
@@ -333,7 +469,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             endAt: e.end_at ?? undefined,
             location: e.location,
             description: e.description ?? "",
-            status: e.status,
+            status: normalizeEventStatus(e.status),
             provider: e.provider ?? undefined,
             confirmationCode: e.confirmation_code ?? undefined,
             attendeeUserIds: (e.attendee_user_ids ?? []) as string[],
@@ -372,13 +508,13 @@ export function AppProvider({ children }: { children: ReactNode; }) {
               id: b.id,
               tripId: b.trip_id,
               title: b.title,
-              category: b.category,
+              category: normalizeBudgetCategory(b.category),
               plannedAmount: Number(b.planned_amount ?? 0),
               actualAmount: Number(b.actual_amount ?? 0),
               currency: b.currency ?? "USD",
               responsibleUserId: b.responsible_user_id,
               paidByUserId: b.paid_by_user_id,
-              status: b.status,
+              status: normalizeBudgetStatus(b.status),
               relatedEventId: b.related_event_id,
               relatedTaskId: b.related_task_id,
               notes: b.notes ?? "",
@@ -427,6 +563,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             createdAt: p.created_at,
           })),
         );
+        setSupabaseMoodboardNotes(moodboardData);
       } catch (err) {
         console.error("[AppContext] Failed to load trip data:", err);
       } finally {
@@ -533,7 +670,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const effectiveTripId = isSupabaseMode ? activeTripId ?? DEMO_TRIP_ID : tripId;
   const effectiveCurrentUserId = isSupabaseMode ? user?.id ?? DEMO_USER_ID : currentUserId;
 
-  // Moodboard always uses localStorage (no Supabase table yet), keyed by effectiveTripId
+  // Demo-mode moodboard stays in localStorage, keyed by trip.
   const demoMoodboardNotes = useMemo(() => {
     void tick;
     return repo.getMoodboardNotes(effectiveTripId);
@@ -548,8 +685,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const checklistItems = isSupabaseMode ? supabaseChecklistItems : demoChecklistItems;
   const polls = isSupabaseMode ? supabasePolls : demoPolls;
   const photos = isSupabaseMode ? supabasePhotos : demoPhotos;
-  // Moodboard always uses localStorage (no Supabase table yet)
-  const moodboardNotes = demoMoodboardNotes;
+  const moodboardNotes = isSupabaseMode ? supabaseMoodboardNotes : demoMoodboardNotes;
 
   const guestFieldSchema: GuestFieldDef[] = trip?.guestFieldSchema ?? [];
 
@@ -594,7 +730,43 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   // ---- Mutation handlers ----
 
   const inviteUser = useCallback(
-    (name: string, email: string) => {
+    async (name: string, email: string) => {
+      if (isSupabaseMode && activeTripId) {
+        // Optimistic: add a temporary user + membership to local state
+        const tempId = uuid();
+        setSupabaseUsers((prev) => [...prev, { id: tempId, name, email }]);
+        setSupabaseMemberships((prev) => [
+          ...prev,
+          { tripId: activeTripId, userId: tempId, role: "GUEST_CONFIRMED" as Role, accountStatus: "INVITED" as const },
+        ]);
+
+        const res = await fetch(`/api/trips/${activeTripId}/guests`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email }),
+        });
+
+        if (!res.ok) {
+          // Revert optimistic update on failure
+          setSupabaseUsers((prev) => prev.filter((u) => u.id !== tempId));
+          setSupabaseMemberships((prev) => prev.filter((m) => m.userId !== tempId));
+          const payload = (await res.json()) as { error?: string };
+          throw new Error(payload.error ?? "Failed to add guest.");
+        }
+
+        // Replace temp ID with the real one from the server response
+        const payload = (await res.json()) as { userId?: string };
+        if (payload.userId && payload.userId !== tempId) {
+          setSupabaseUsers((prev) =>
+            prev.map((u) => u.id === tempId ? { ...u, id: payload.userId! } : u)
+          );
+          setSupabaseMemberships((prev) =>
+            prev.map((m) => m.userId === tempId ? { ...m, userId: payload.userId! } : m)
+          );
+        }
+        return;
+      }
+
       const id = uuid();
       repo.addUser({ id, name, email, avatarColor: "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0") });
       repo.addMembership({
@@ -604,7 +776,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         accountStatus: "INVITED",
       });
     },
-    [tripId]
+    [tripId, isSupabaseMode, activeTripId]
   );
 
   const addGuestField = useCallback(
@@ -660,11 +832,10 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         setSupabaseMemberships((prev) =>
           prev.map((m) => m.userId === userId ? { ...m, accountStatus: status } : m)
         );
-        const dbStatus = status === "CLAIMED" ? "ACCEPTED" : status === "INVITED" ? "PENDING" : status;
         void fetch(`/api/trips/${activeTripId}/guests`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, patch: { invite_status: dbStatus } }),
+          body: JSON.stringify({ userId, patch: { account_status: status } }),
         });
         return;
       }
@@ -691,39 +862,152 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     [tripId, isSupabaseMode, activeTripId]
   );
 
+  const deleteGuest = useCallback(
+    async (userId: string) => {
+      if (isSupabaseMode && activeTripId) {
+        const previousUsers = supabaseUsers;
+        const previousMemberships = supabaseMemberships;
+
+        setSupabaseMemberships((prev) => prev.filter((m) => m.userId !== userId));
+        setSupabaseUsers((prev) => {
+          const remainingMemberships = previousMemberships.filter((m) => m.userId !== userId);
+          const stillReferenced = remainingMemberships.some((m) => m.userId === userId);
+          return stillReferenced ? prev : prev.filter((u) => u.id !== userId);
+        });
+
+        const res = await fetch("/api/guests", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, tripId: activeTripId }),
+        });
+
+        if (!res.ok) {
+          setSupabaseUsers(previousUsers);
+          setSupabaseMemberships(previousMemberships);
+          const payload = (await res.json()) as { error?: string };
+          throw new Error(payload.error ?? "Failed to delete guest.");
+        }
+
+        return;
+      }
+
+      repo.removeGuestFromTrip(tripId, userId);
+    },
+    [activeTripId, isSupabaseMode, supabaseMemberships, supabaseUsers, tripId]
+  );
+
   const addEvent = useCallback(
     (data: Omit<TripEvent, "id" | "tripId">) => {
+      if (isSupabaseMode && activeTripId) {
+        const id = uuid();
+        const newEvent: TripEvent = { ...data, id, tripId: activeTripId };
+        setSupabaseEvents((prev) => [...prev, newEvent]);
+        void fetch(`/api/trips/${activeTripId}/events`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, id }),
+        });
+        return;
+      }
       repo.addEvent({ ...data, id: uuid(), tripId });
     },
-    [tripId]
+    [tripId, isSupabaseMode, activeTripId]
   );
   const updateEvent = useCallback(
     (id: string, patch: Partial<TripEvent>) => {
       if (isSupabaseMode && activeTripId) {
+        const prevEvent = supabaseEvents.find((event) => event.id === id);
+        const oldAttendeeCount = prevEvent?.attendeeUserIds.length ?? 0;
+        const newAttendeeCount = patch.attendeeUserIds?.length ?? oldAttendeeCount;
+        const amountPatches = computePerPersonEvenSplitAmountPatch(
+          supabaseBudgetItems,
+          id,
+          oldAttendeeCount,
+          newAttendeeCount
+        );
+
         setSupabaseEvents((prev) =>
           prev.map((e) => e.id === id ? { ...e, ...patch } : e)
         );
+        if (amountPatches.length > 0) {
+          setSupabaseBudgetItems((prev) =>
+            prev.map((item) => {
+              const amountPatch = amountPatches.find((p) => p.id === item.id);
+              return amountPatch
+                ? { ...item, plannedAmount: amountPatch.plannedAmount, actualAmount: amountPatch.actualAmount }
+                : item;
+            })
+          );
+        }
         void fetch(`/api/trips/${activeTripId}/events`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, patch }),
         });
+        if (amountPatches.length > 0) {
+          for (const amountPatch of amountPatches) {
+            void fetch(`/api/trips/${activeTripId}/budget`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: amountPatch.id, patch: { plannedAmount: amountPatch.plannedAmount, actualAmount: amountPatch.actualAmount } }),
+            });
+          }
+        }
         return;
       }
+
+      const prevEvent = repo.getEvent(id);
+      const oldAttendeeCount = prevEvent?.attendeeUserIds.length ?? 0;
+      const newAttendeeCount = patch.attendeeUserIds?.length ?? oldAttendeeCount;
+
       repo.updateEvent(id, patch);
+      const amountPatches = computePerPersonEvenSplitAmountPatch(
+        repo.getBudgetItems(tripId),
+        id,
+        oldAttendeeCount,
+        newAttendeeCount
+      );
+      for (const amountPatch of amountPatches) {
+        repo.updateBudgetItem(amountPatch.id, {
+          plannedAmount: amountPatch.plannedAmount,
+          actualAmount: amountPatch.actualAmount,
+        });
+      }
     },
-    [isSupabaseMode, activeTripId]
+    [isSupabaseMode, activeTripId, supabaseEvents, supabaseBudgetItems, tripId]
   );
   const deleteEvent = useCallback(
-    (id: string) => repo.deleteEvent(id),
-    []
+    (id: string) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseEvents((prev) => prev.filter((e) => e.id !== id));
+        void fetch(`/api/trips/${activeTripId}/events`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        return;
+      }
+      repo.deleteEvent(id);
+    },
+    [isSupabaseMode, activeTripId]
   );
 
   const addTask = useCallback(
     (data: Omit<Task, "id" | "tripId">) => {
+      if (isSupabaseMode && activeTripId) {
+        const id = uuid();
+        const newTask: Task = { ...data, id, tripId: activeTripId };
+        setSupabaseTasks((prev) => [...prev, newTask]);
+        void fetch(`/api/trips/${activeTripId}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, id }),
+        });
+        return;
+      }
       repo.addTask({ ...data, id: uuid(), tripId });
     },
-    [tripId]
+    [tripId, isSupabaseMode, activeTripId]
   );
   const updateTask = useCallback(
     (id: string, patch: Partial<Task>) => {
@@ -731,10 +1015,10 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         setSupabaseTasks((prev) =>
           prev.map((t) => t.id === id ? { ...t, ...patch } : t)
         );
-        void fetch(`/api/trips/${activeTripId}/events`, {
+        void fetch(`/api/trips/${activeTripId}/tasks`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "task", id, patch }),
+          body: JSON.stringify({ id, patch }),
         });
         return;
       }
@@ -743,15 +1027,37 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     [isSupabaseMode, activeTripId]
   );
   const deleteTask = useCallback(
-    (id: string) => repo.deleteTask(id),
-    []
+    (id: string) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseTasks((prev) => prev.filter((t) => t.id !== id));
+        void fetch(`/api/trips/${activeTripId}/tasks`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        return;
+      }
+      repo.deleteTask(id);
+    },
+    [isSupabaseMode, activeTripId]
   );
 
   const addBudgetItem = useCallback(
     (data: Omit<BudgetItem, "id" | "tripId">) => {
+      if (isSupabaseMode && activeTripId) {
+        const id = uuid();
+        const newItem: BudgetItem = { ...data, id, tripId: activeTripId };
+        setSupabaseBudgetItems((prev) => [...prev, newItem]);
+        void fetch(`/api/trips/${activeTripId}/budget`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, id }),
+        });
+        return;
+      }
       repo.addBudgetItem({ ...data, id: uuid(), tripId });
     },
-    [tripId]
+    [tripId, isSupabaseMode, activeTripId]
   );
   const updateBudgetItem = useCallback(
     (id: string, patch: Partial<BudgetItem>) => {
@@ -771,8 +1077,19 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     [isSupabaseMode, activeTripId]
   );
   const deleteBudgetItem = useCallback(
-    (id: string) => repo.deleteBudgetItem(id),
-    []
+    (id: string) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseBudgetItems((prev) => prev.filter((b) => b.id !== id));
+        void fetch(`/api/trips/${activeTripId}/budget`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        return;
+      }
+      repo.deleteBudgetItem(id);
+    },
+    [isSupabaseMode, activeTripId]
   );
 
   // Checklist
@@ -822,21 +1139,201 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   // Moodboard
   const addMoodboardNote = useCallback(
     (data: Omit<MoodboardNote, "id" | "tripId">) => {
+      if (isSupabaseMode && activeTripId) {
+        const id = uuid();
+        const newNote: MoodboardNote = { ...data, id, tripId: activeTripId };
+        setSupabaseMoodboardNotes((prev) => [...prev, newNote]);
+        void fetch(`/api/trips/${activeTripId}/moodboard`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, id }),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            throw new Error(payload.error ?? "Failed to create moodboard note.");
+          }
+        }).catch((error) => {
+          console.error("[AppContext] Failed to create moodboard note:", error);
+          setSupabaseMoodboardNotes((prev) => prev.filter((note) => note.id !== id));
+        });
+        return;
+      }
       repo.addMoodboardNote({ ...data, id: uuid(), tripId: effectiveTripId });
     },
-    [effectiveTripId]
+    [activeTripId, effectiveTripId, isSupabaseMode]
+  );
+  const clearMoodboardPatchQueue = useCallback((noteId?: string) => {
+    if (noteId) {
+      const timeout = moodboardPatchTimeoutsRef.current.get(noteId);
+      if (timeout) clearTimeout(timeout);
+      moodboardPatchTimeoutsRef.current.delete(noteId);
+      moodboardPatchBufferRef.current.delete(noteId);
+      return;
+    }
+
+    for (const timeout of moodboardPatchTimeoutsRef.current.values()) {
+      clearTimeout(timeout);
+    }
+    moodboardPatchTimeoutsRef.current.clear();
+    moodboardPatchBufferRef.current.clear();
+  }, []);
+  const flushMoodboardPatch = useCallback(
+    (noteId: string) => {
+      if (!activeTripId) return;
+
+      const patch = moodboardPatchBufferRef.current.get(noteId);
+      if (!patch) return;
+
+      moodboardPatchBufferRef.current.delete(noteId);
+      moodboardPatchTimeoutsRef.current.delete(noteId);
+
+      void fetch(`/api/trips/${activeTripId}/moodboard`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: noteId, patch }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const payload = (await res.json()) as { error?: string };
+          throw new Error(payload.error ?? "Failed to update moodboard note.");
+        }
+      }).catch((error) => {
+        console.error("[AppContext] Failed to update moodboard note:", error);
+        refresh();
+      });
+    },
+    [activeTripId, refresh]
+  );
+  const queueMoodboardPatch = useCallback(
+    (noteId: string, patch: Partial<MoodboardNote>) => {
+      const nextPatch = {
+        ...(moodboardPatchBufferRef.current.get(noteId) ?? {}),
+        ...patch,
+      };
+      moodboardPatchBufferRef.current.set(noteId, nextPatch);
+
+      const existingTimeout = moodboardPatchTimeoutsRef.current.get(noteId);
+      if (existingTimeout) clearTimeout(existingTimeout);
+
+      const timeout = setTimeout(() => {
+        flushMoodboardPatch(noteId);
+      }, MOODBOARD_SAVE_DEBOUNCE_MS);
+
+      moodboardPatchTimeoutsRef.current.set(noteId, timeout);
+    },
+    [flushMoodboardPatch]
   );
   const updateMoodboardNote = useCallback(
     (id: string, patch: Partial<MoodboardNote>) => {
+      if (isSupabaseMode && activeTripId) {
+        setSupabaseMoodboardNotes((prev) =>
+          prev.map((note) => note.id === id ? { ...note, ...patch } : note)
+        );
+        queueMoodboardPatch(id, patch);
+        return;
+      }
       repo.updateMoodboardNote(id, patch);
     },
-    []
+    [activeTripId, isSupabaseMode, queueMoodboardPatch]
   );
   const deleteMoodboardNote = useCallback(
     (id: string) => {
+      if (isSupabaseMode && activeTripId) {
+        clearMoodboardPatchQueue(id);
+        const previousNotes = supabaseMoodboardNotes;
+        setSupabaseMoodboardNotes((prev) => prev.filter((note) => note.id !== id));
+        void fetch(`/api/trips/${activeTripId}/moodboard`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            throw new Error(payload.error ?? "Failed to delete moodboard note.");
+          }
+        }).catch((error) => {
+          console.error("[AppContext] Failed to delete moodboard note:", error);
+          setSupabaseMoodboardNotes(previousNotes);
+        });
+        return;
+      }
       repo.deleteMoodboardNote(id);
     },
-    []
+    [activeTripId, clearMoodboardPatchQueue, isSupabaseMode, supabaseMoodboardNotes]
+  );
+  const setMoodboardNotes = useCallback(
+    (notes: MoodboardNote[]) => {
+      if (isSupabaseMode && activeTripId) {
+        clearMoodboardPatchQueue();
+        const previousNotes = supabaseMoodboardNotes;
+        setSupabaseMoodboardNotes(notes);
+        void fetch(`/api/trips/${activeTripId}/moodboard`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(notes),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            throw new Error(payload.error ?? "Failed to save moodboard notes.");
+          }
+        }).catch((error) => {
+          console.error("[AppContext] Failed to save moodboard notes:", error);
+          setSupabaseMoodboardNotes(previousNotes);
+        });
+        return;
+      }
+      repo.setMoodboardNotes(effectiveTripId, notes);
+    },
+    [activeTripId, clearMoodboardPatchQueue, effectiveTripId, isSupabaseMode, supabaseMoodboardNotes]
+  );
+  const uploadMoodboardImage = useCallback(
+    async (noteId: string, file: File): Promise<NoteImage> => {
+      if (isSupabaseMode && activeTripId) {
+        const imageId = uuid();
+        const formData = new FormData();
+        formData.set("imageId", imageId);
+        formData.set("noteId", noteId);
+        formData.set("file", file);
+
+        const res = await fetch(`/api/trips/${activeTripId}/moodboard/images`, {
+          method: "POST",
+          body: formData,
+        });
+        const payload = (await res.json()) as {
+          id?: string;
+          url?: string;
+          error?: string;
+        };
+
+        if (!res.ok || !payload.id || !payload.url) {
+          throw new Error(payload.error ?? "Failed to upload moodboard image.");
+        }
+
+        return {
+          id: payload.id,
+          dataUrl: payload.url,
+          width: null,
+          x: 0,
+          y: 0,
+        };
+      }
+
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () =>
+          reject(reader.error ?? new Error("Failed to read image."));
+        reader.readAsDataURL(file);
+      });
+
+      return {
+        id: uuid(),
+        dataUrl,
+        width: null,
+        x: 0,
+        y: 0,
+      };
+    },
+    [activeTripId, isSupabaseMode]
   );
 
   // Create a Task linked to a BudgetItem (and back-link the BudgetItem)
@@ -864,7 +1361,93 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
   // ---- Unified Plan Activity ----
   const planActivity = useCallback(
-    (input: PlanActivityInput) => {
+    async (input: PlanActivityInput) => {
+      if (isSupabaseMode && activeTripId) {
+        const eventId = input.createEvent ? uuid() : null;
+        const taskId = input.createTask ? uuid() : null;
+        const budgetId = input.createBudget ? uuid() : null;
+
+        if (input.createEvent && eventId) {
+          const res = await fetch(`/api/trips/${activeTripId}/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: eventId,
+              title: input.eventTitleOverride || input.title,
+              description: input.description,
+              location: input.eventLocation || "",
+              startAt: input.eventStartAt || new Date().toISOString(),
+              endAt: input.eventEndAt || new Date().toISOString(),
+              status: input.eventStatus || "DRAFT",
+              provider: input.eventProvider || undefined,
+              confirmationCode: input.eventConfirmationCode || undefined,
+              attendeeUserIds: input.eventAttendeeUserIds || [],
+            }),
+          });
+
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            throw new Error(payload.error ?? "Failed to create event.");
+          }
+        }
+
+        if (input.createTask && taskId) {
+          const res = await fetch(`/api/trips/${activeTripId}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: taskId,
+              title:
+                input.taskTitleOverride ||
+                (input.createEvent ? `Book: ${input.title}` : input.title),
+              description: input.description,
+              status: input.taskStatus || "TODO",
+              priority: input.taskPriority || "MEDIUM",
+              dueAt: input.taskDueAt || null,
+              assigneeUserIds: input.taskAssigneeIds || [],
+              relatedEventId: eventId,
+              relatedBudgetItemId: budgetId,
+            }),
+          });
+
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            throw new Error(payload.error ?? "Failed to create task.");
+          }
+        }
+
+        if (input.createBudget && budgetId) {
+          const res = await fetch(`/api/trips/${activeTripId}/budget`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: budgetId,
+              title: input.budgetTitleOverride || input.title,
+              category: input.budgetCategory || "MISC",
+              plannedAmount: input.budgetPlannedAmount || 0,
+              actualAmount: input.budgetActualAmount || 0,
+              currency: "USD",
+              responsibleUserId: input.budgetResponsibleId || null,
+              paidByUserId: input.budgetPaidById || null,
+              costMode: input.budgetCostMode || "total",
+              splitType: input.budgetSplitType || "even",
+              status: input.budgetStatus || "PLANNED",
+              relatedEventId: eventId,
+              relatedTaskId: taskId,
+              notes: input.budgetNotes?.trim() || "",
+            }),
+          });
+
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            throw new Error(payload.error ?? "Failed to create budget item.");
+          }
+        }
+
+        refresh();
+        return;
+      }
+
       const eventId = input.createEvent ? uuid() : null;
       const taskId = input.createTask ? uuid() : null;
       const budgetId = input.createBudget ? uuid() : null;
@@ -898,6 +1481,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
           currency: "USD",
           responsibleUserId: input.budgetResponsibleId || null,
           paidByUserId: input.budgetPaidById || null,
+          costMode: input.budgetCostMode || "total",
+          splitType: input.budgetSplitType || "even",
           status: input.budgetStatus || "PLANNED",
           relatedEventId: eventId,
           relatedTaskId: taskId,
@@ -921,7 +1506,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         });
       }
     },
-    [tripId]
+    [activeTripId, isSupabaseMode, refresh, tripId]
   );
 
   const value: AppContextValue = {
@@ -947,6 +1532,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     updateUser,
     updateMembershipStatus,
     updateMemberRole,
+    deleteGuest,
     addEvent,
     updateEvent,
     deleteEvent,
@@ -971,6 +1557,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     addMoodboardNote,
     updateMoodboardNote,
     deleteMoodboardNote,
+    setMoodboardNotes,
+    uploadMoodboardImage,
     createTaskForBudgetItem,
     planActivity,
     clearAllData: () => { clearAllData(); closePanel(); },

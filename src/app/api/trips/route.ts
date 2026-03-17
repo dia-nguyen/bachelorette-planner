@@ -19,7 +19,7 @@ export async function GET() {
 
   // Get all trips via memberships + trips created by user
   const [membershipRows, createdTripRows] = await Promise.all([
-    supabase.from("memberships").select("trip_id").eq("profile_id", user.id),
+    supabase.from("memberships").select("trip_id").eq("user_id", user.id),
     supabase.from("trips").select("*").eq("created_by", user.id),
   ]);
 
@@ -116,9 +116,9 @@ export async function POST(req: Request) {
   // Auto-assign creator as MOH_ADMIN
   await admin.from("memberships").insert({
     trip_id: tripRow.id,
-    profile_id: user.id,
+    user_id: user.id,
     role: "MOH_ADMIN",
-    invite_status: "ACCEPTED",
+    account_status: "CLAIMED",
   });
 
   return NextResponse.json({ trip: tripRow }, { status: 201 });

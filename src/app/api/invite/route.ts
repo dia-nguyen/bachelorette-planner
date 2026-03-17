@@ -119,8 +119,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // Ensure the user has a profile row (auto-created on first login, but guard anyway)
-  await admin.from("profiles").upsert(
+  // Ensure the user has a users row (auto-created on first login, but guard anyway)
+  await admin.from("users").upsert(
     {
       id: user.id,
       email: user.email ?? "",
@@ -129,9 +129,6 @@ export async function POST(req: Request) {
         user.user_metadata?.name ??
         user.email?.split("@")[0] ??
         "Guest",
-      avatar_url:
-        user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null,
-      is_verified: true,
     },
     { onConflict: "id" },
   );
@@ -140,11 +137,11 @@ export async function POST(req: Request) {
   const { error: memberError } = await admin.from("memberships").upsert(
     {
       trip_id: invite.trip_id,
-      profile_id: user.id,
+      user_id: user.id,
       role: "GUEST_CONFIRMED",
-      invite_status: "ACCEPTED",
+      account_status: "CLAIMED",
     },
-    { onConflict: "trip_id,profile_id" },
+    { onConflict: "trip_id,user_id" },
   );
 
   if (memberError) {

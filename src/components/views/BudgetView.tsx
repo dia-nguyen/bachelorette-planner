@@ -5,7 +5,28 @@ import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
 import type { BudgetItem, TripEvent } from "@/lib/data";
 import { formatCurrency } from "@/lib/domain";
+import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
+
+const cellSt: CSSProperties = {
+  padding: "10px 12px",
+  fontSize: "var(--font-sm)",
+  verticalAlign: "middle",
+  borderBottom: "1px solid var(--color-border)",
+};
+
+const headCellSt: CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-muted)",
+  borderBottom: "2px solid var(--color-border)",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
 
 /** Get the attendee user IDs for a budget item (from linked event or explicit list) */
 function getItemAttendees(item: BudgetItem, events: TripEvent[]): string[] {
@@ -151,71 +172,73 @@ export function BudgetView() {
           actionLabel="Plan something with the + button above"
         />
       ) : (
-        <div className="overflow-x-auto">
-          <Card style={{ minWidth: 580 }}>
-            {/* Table header */}
-            <div
-              className="grid gap-3 py-2 mb-1"
-              style={{
-                gridTemplateColumns: selectedUserId === "all" ? "2fr 1fr 1fr 1fr 1fr 1fr" : "2fr 1fr 1fr 1fr 1fr 1fr 1fr",
-                fontSize: "var(--font-sm)",
-                fontWeight: 600,
-                color: "var(--color-text-secondary)",
-                borderBottom: "1px solid var(--color-border)",
-              }}
-            >
-              <span>Title</span>
-              <span>Category</span>
-              <span>Planned</span>
-              <span>Actual</span>
-              <span>Paid By</span>
-              <span>Status</span>
-              {selectedUserId !== "all" && <span>Your Share</span>}
-            </div>
-            {filteredItems.map((item) => {
-              const payer = users.find((u) => u.id === item.paidByUserId);
-              const yourShare = selectedUserId !== "all"
-                ? (item.actualAmount > 0 ? perPersonActual(item, selectedUserId, events) : perPersonPlanned(item, selectedUserId, events))
-                : 0;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => openPanel("budget", item.id)}
-                  className="grid gap-3 py-3 w-full text-left"
-                  style={{
-                    gridTemplateColumns: selectedUserId === "all" ? "2fr 1fr 1fr 1fr 1fr 1fr" : "2fr 1fr 1fr 1fr 1fr 1fr 1fr",
-                    borderBottom: "1px solid var(--color-border)",
-                    background: "none",
-                    border: "none",
-                    borderBlockEnd: "1px solid var(--color-border)",
-                    cursor: "pointer",
-                    fontSize: "var(--font-md)",
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <span style={{ fontWeight: 500 }}>{item.title}</span>
-                  </span>
-                  <span><Badge variant="accent">{item.category}</Badge></span>
-                  <span>{formatCurrency(item.plannedAmount)}</span>
-                  <span>{item.actualAmount > 0 ? formatCurrency(item.actualAmount) : "—"}</span>
-                  <span className="flex items-center gap-1">
-                    {payer ? (
-                      <>
-                        <Avatar name={payer.name} color={payer.avatarColor} size={20} />
-                        <span style={{ fontSize: "var(--font-sm)" }}>{payer.name.split(" ")[0]}</span>
-                      </>
-                    ) : (
-                      <span style={{ color: "var(--color-text-secondary)" }}>—</span>
+        <div style={{ overflowX: "auto", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)" }}>
+          <table style={{ width: "100%", minWidth: selectedUserId === "all" ? 720 : 840, borderCollapse: "collapse", background: "var(--color-bg-surface)" }}>
+            <thead>
+              <tr>
+                <th style={headCellSt}>Title</th>
+                <th style={headCellSt}>Category</th>
+                <th style={headCellSt}>Planned</th>
+                <th style={headCellSt}>Actual</th>
+                <th style={headCellSt}>Paid By</th>
+                <th style={headCellSt}>Status</th>
+                {selectedUserId !== "all" && <th style={headCellSt}>Your Share</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.map((item) => {
+                const payer = users.find((u) => u.id === item.paidByUserId);
+                const yourShare = selectedUserId !== "all"
+                  ? (item.actualAmount > 0 ? perPersonActual(item, selectedUserId, events) : perPersonPlanned(item, selectedUserId, events))
+                  : 0;
+
+                return (
+                  <tr
+                    key={item.id}
+                    onClick={() => openPanel("budget", item.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openPanel("budget", item.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    style={{ cursor: "pointer" }}
+                  >
+                    <td style={cellSt}>
+                      <span style={{ fontWeight: 500 }}>{item.title}</span>
+                    </td>
+                    <td style={cellSt}>
+                      <Badge variant="accent">{item.category}</Badge>
+                    </td>
+                    <td style={cellSt}>{formatCurrency(item.plannedAmount)}</td>
+                    <td style={{ ...cellSt, color: item.actualAmount > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
+                      {item.actualAmount > 0 ? formatCurrency(item.actualAmount) : "—"}
+                    </td>
+                    <td style={cellSt}>
+                      {payer ? (
+                        <div className="flex items-center gap-2">
+                          <Avatar name={payer.name} color={payer.avatarColor} size={24} />
+                          <span>{payer.name.split(" ")[0]}</span>
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--color-text-secondary)" }}>—</span>
+                      )}
+                    </td>
+                    <td style={cellSt}>
+                      <Badge variant={budgetStatusVariant(item.status)}>{item.status}</Badge>
+                    </td>
+                    {selectedUserId !== "all" && (
+                      <td style={{ ...cellSt, fontWeight: 600, color: "var(--color-accent)" }}>
+                        {formatCurrency(yourShare)}
+                      </td>
                     )}
-                  </span>
-                  <span><Badge variant={budgetStatusVariant(item.status)}>{item.status}</Badge></span>
-                  {selectedUserId !== "all" && (
-                    <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>{formatCurrency(yourShare)}</span>
-                  )}
-                </button>
-              );
-            })}
-          </Card>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

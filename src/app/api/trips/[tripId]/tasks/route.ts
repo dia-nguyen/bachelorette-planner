@@ -4,44 +4,23 @@ import { NextResponse } from "next/server";
 
 const isSupabase = () => process.env.NEXT_PUBLIC_DATA_MODE === "supabase";
 
-// Map camelCase domain keys → snake_case DB columns for budget_items
+// Map camelCase domain keys → snake_case DB columns for tasks
 const FIELD_MAP: Record<string, string> = {
   title: "title",
-  category: "category",
-  plannedAmount: "planned_amount",
-  actualAmount: "actual_amount",
-  currency: "currency",
+  description: "description",
   status: "status",
-  responsibleUserId: "responsible_user_id",
-  paidByUserId: "paid_by_user_id",
+  priority: "priority",
+  dueAt: "due_at",
+  assigneeUserIds: "assignee_user_ids",
   relatedEventId: "related_event_id",
-  relatedTaskId: "related_task_id",
-  notes: "notes",
-  costMode: "cost_mode",
-  splitType: "split_type",
-  plannedSplits: "planned_splits",
-  actualSplits: "actual_splits",
-  splitAttendeeUserIds: "split_attendee_user_ids",
+  relatedBudgetItemId: "related_budget_item_id",
 };
 
 function toDbPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
     const dbKey = FIELD_MAP[key];
-    if (!dbKey) continue;
-    if (key === "status" && typeof value === "string") {
-      result[dbKey] = value === "PURCHASED" || value === "REIMBURSED" || value === "SETTLED"
-        ? "PAID"
-        : value === "CANCELED"
-          ? "CANCELLED"
-          : value;
-    } else if (key === "costMode" && typeof value === "string") {
-      result[dbKey] = value === "per_person" ? "PER_PERSON" : value === "total" ? "TOTAL" : value.toUpperCase();
-    } else if (key === "splitType" && typeof value === "string") {
-      result[dbKey] = value === "even" ? "EQUAL" : value === "custom" ? "CUSTOM" : value.toUpperCase();
-    } else {
-      result[dbKey] = value;
-    }
+    if (dbKey) result[dbKey] = value;
   }
   return result;
 }
@@ -55,12 +34,12 @@ export async function GET(
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const { data, error } = await supabase.from("budget_items").select("*").eq("trip_id", tripId);
+    const { data, error } = await supabase.from("tasks").select("*").eq("trip_id", tripId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   }
-  const items = demoRepository.getBudgetItems(tripId);
-  return NextResponse.json(items);
+  const tasks = demoRepository.getTasks(tripId);
+  return NextResponse.json(tasks);
 }
 
 export async function POST(
@@ -77,15 +56,15 @@ export async function POST(
 
     const dbRow: Record<string, unknown> = { ...toDbPatch(body), trip_id: tripId };
     if (body.id) dbRow.id = body.id;
-    const { data, error } = await supabase.from("budget_items").insert(dbRow).select().single();
+    const { data, error } = await supabase.from("tasks").insert(dbRow).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data, { status: 201 });
   }
 
   const { v4: uuid } = await import("uuid");
-  const item = { ...body, id: uuid(), tripId };
-  demoRepository.addBudgetItem(item);
-  return NextResponse.json(item, { status: 201 });
+  const task = { ...body, id: uuid(), tripId };
+  demoRepository.addTask(task);
+  return NextResponse.json(task, { status: 201 });
 }
 
 export async function PATCH(
@@ -106,7 +85,7 @@ export async function PATCH(
 
     const dbPatch = toDbPatch(patch);
     const { data, error } = await supabase
-      .from("budget_items")
+      .from("tasks")
       .update(dbPatch)
       .eq("id", id)
       .eq("trip_id", tripId)
@@ -116,7 +95,7 @@ export async function PATCH(
     return NextResponse.json(data);
   }
 
-  demoRepository.updateBudgetItem(id, patch);
+  demoRepository.updateTask(id, patch);
   return NextResponse.json({ ok: true });
 }
 
@@ -136,11 +115,11 @@ export async function DELETE(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const { error } = await supabase.from("budget_items").delete().eq("id", id).eq("trip_id", tripId);
+    const { error } = await supabase.from("tasks").delete().eq("id", id).eq("trip_id", tripId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
-  demoRepository.deleteBudgetItem(id);
+  demoRepository.deleteTask(id);
   return NextResponse.json({ ok: true });
 }

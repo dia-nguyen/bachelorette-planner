@@ -18,7 +18,7 @@ export async function GET() {
 
   // Sequential queries to avoid connection pool exhaustion
   const profileRes = await supabase
-    .from("profiles")
+    .from("users")
     .select("is_verified")
     .eq("id", user.id)
     .maybeSingle();

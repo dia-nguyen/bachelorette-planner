@@ -232,6 +232,8 @@ export interface PlanActivityInput {
   budgetCategory?: BudgetCategory;
   budgetPlannedAmount?: number;
   budgetActualAmount?: number;
+  budgetCostMode?: "total" | "per_person";
+  budgetSplitType?: CostSplitType;
   budgetStatus?: BudgetItemStatus;
   budgetResponsibleId?: string | null;
   budgetPaidById?: string | null;
@@ -297,13 +299,25 @@ export type StickyNoteColor =
   | "purple"
   | "orange";
 
+/** A single image attached to a sticky note */
+export interface NoteImage {
+  id: string;
+  /** Public URL in Supabase mode; base64 data URI in demo mode */
+  dataUrl: string;
+  /** Display width in px */
+  width: number | null;
+  /** Position within the note's image stage */
+  x: number;
+  /** Position within the note's image stage */
+  y: number;
+}
+
 export interface MoodboardNote {
   id: string;
   tripId: string;
   title: string;
   text: string;
-  /** base64 data URI for pasted images */
-  imageDataUrl: string | null;
+  images: NoteImage[];
   color: StickyNoteColor;
   x: number;
   y: number;

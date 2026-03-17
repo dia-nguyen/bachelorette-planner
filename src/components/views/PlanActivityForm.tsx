@@ -2,7 +2,7 @@
 
 import { Avatar, Card } from "@/components/ui";
 import { useApp } from "@/lib/context";
-import type { BudgetCategory, BudgetItemStatus, EventStatus, TaskPriority, TaskStatus } from "@/lib/data";
+import type { BudgetCategory, BudgetItemStatus, CostSplitType, EventStatus, TaskPriority, TaskStatus } from "@/lib/data";
 import { useState } from "react";
 
 const CATEGORIES: BudgetCategory[] = [
@@ -16,6 +16,8 @@ interface PlanActivityFormProps {
 
 export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
   const { users, memberships, planActivity } = useApp();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Core
   const [title, setTitle] = useState("");
@@ -53,6 +55,8 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
   const [budgetCategory, setBudgetCategory] = useState<BudgetCategory>("MISC");
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetActualAmount, setBudgetActualAmount] = useState("");
+  const [budgetCostMode, setBudgetCostMode] = useState<"total" | "per_person">("total");
+  const [budgetSplitType, setBudgetSplitType] = useState<CostSplitType>("even");
   const [budgetStatus, setBudgetStatus] = useState<BudgetItemStatus>("PLANNED");
   const [budgetResponsible, setBudgetResponsible] = useState("");
   const [budgetPaidBy, setBudgetPaidBy] = useState("");
@@ -68,41 +72,75 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
     );
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!title.trim()) return;
-    planActivity({
-      title: title.trim(),
-      description: description.trim(),
-      eventTitleOverride: eventTitleUnlocked && eventTitleValue.trim() ? eventTitleValue.trim() : undefined,
-      taskTitleOverride: taskTitleUnlocked && taskTitleValue.trim() ? taskTitleValue.trim() : undefined,
-      budgetTitleOverride: budgetTitleUnlocked && budgetTitleValue.trim() ? budgetTitleValue.trim() : undefined,
-      createEvent: wantEvent,
-      eventLocation: eventLocation.trim(),
-      eventStartAt: eventStartAt ? new Date(eventStartAt).toISOString() : undefined,
-      eventEndAt: eventEndAt ? new Date(eventEndAt).toISOString() : undefined,
-      eventStatus,
-      eventProvider: eventProvider.trim() || undefined,
-      eventConfirmationCode: eventConfirmationCode.trim() || undefined,
-      eventAttendeeUserIds: eventAttendees,
-      createTask: wantTask,
-      taskAssigneeIds: taskAssignees,
-      taskPriority,
-      taskStatus,
-      taskDueAt: taskDueAt ? new Date(taskDueAt).toISOString() : null,
-      createBudget: wantBudget,
-      budgetCategory,
-      budgetPlannedAmount: parseFloat(budgetAmount) || 0,
-      budgetActualAmount: parseFloat(budgetActualAmount) || 0,
-      budgetStatus,
-      budgetResponsibleId: budgetResponsible || null,
-      budgetPaidById: budgetPaidBy || null,
-      budgetNotes: budgetNotes.trim() || undefined,
-    });
-    onClose();
+    setSubmitError(null);
+    setSubmitting(true);
+
+    const attendeeCountForBudget = wantEvent ? eventAttendees.length : 0;
+    const plannedInputAmount = parseFloat(budgetAmount) || 0;
+    const actualInputAmount = parseFloat(budgetActualAmount) || 0;
+    const budgetPlannedAmountTotal =
+      budgetCostMode === "per_person" && attendeeCountForBudget > 0
+        ? plannedInputAmount * attendeeCountForBudget
+        : plannedInputAmount;
+    const budgetActualAmountTotal =
+      budgetCostMode === "per_person" && attendeeCountForBudget > 0
+        ? actualInputAmount * attendeeCountForBudget
+        : actualInputAmount;
+
+    try {
+      await planActivity({
+        title: title.trim(),
+        description: description.trim(),
+        eventTitleOverride: eventTitleUnlocked && eventTitleValue.trim() ? eventTitleValue.trim() : undefined,
+        taskTitleOverride: taskTitleUnlocked && taskTitleValue.trim() ? taskTitleValue.trim() : undefined,
+        budgetTitleOverride: budgetTitleUnlocked && budgetTitleValue.trim() ? budgetTitleValue.trim() : undefined,
+        createEvent: wantEvent,
+        eventLocation: eventLocation.trim(),
+        eventStartAt: eventStartAt ? new Date(eventStartAt).toISOString() : undefined,
+        eventEndAt: eventEndAt ? new Date(eventEndAt).toISOString() : undefined,
+        eventStatus,
+        eventProvider: eventProvider.trim() || undefined,
+        eventConfirmationCode: eventConfirmationCode.trim() || undefined,
+        eventAttendeeUserIds: eventAttendees,
+        createTask: wantTask,
+        taskAssigneeIds: taskAssignees,
+        taskPriority,
+        taskStatus,
+        taskDueAt: taskDueAt ? new Date(taskDueAt).toISOString() : null,
+        createBudget: wantBudget,
+        budgetCategory,
+        budgetPlannedAmount: budgetPlannedAmountTotal,
+        budgetActualAmount: budgetActualAmountTotal,
+        budgetCostMode,
+        budgetSplitType,
+        budgetStatus,
+        budgetResponsibleId: budgetResponsible || null,
+        budgetPaidById: budgetPaidBy || null,
+        budgetNotes: budgetNotes.trim() || undefined,
+      });
+      onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to create item.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Count how many entities will be created
   const entityCount = [wantEvent, wantTask, wantBudget].filter(Boolean).length;
+  const budgetAttendeeCount = wantEvent ? eventAttendees.length : 0;
+  const plannedPreviewAmount = parseFloat(budgetAmount) || 0;
+  const actualPreviewAmount = parseFloat(budgetActualAmount) || 0;
+  const plannedTotalPreview =
+    budgetCostMode === "per_person" && budgetAttendeeCount > 0
+      ? plannedPreviewAmount * budgetAttendeeCount
+      : plannedPreviewAmount;
+  const actualTotalPreview =
+    budgetCostMode === "per_person" && budgetAttendeeCount > 0
+      ? actualPreviewAmount * budgetAttendeeCount
+      : actualPreviewAmount;
 
   return (
     <Card>
@@ -116,6 +154,12 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
       <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 16 }}>
         Describe what you&apos;re planning, then toggle which pieces to track. Everything gets linked automatically.
       </p>
+
+      {submitError && (
+        <p style={{ fontSize: "var(--font-sm)", color: "#dc2626", marginBottom: 16 }}>
+          {submitError}
+        </p>
+      )}
 
       {/* Core fields */}
       <div className="grid grid-cols-1 gap-3 mb-4">
@@ -341,12 +385,36 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
                 </select>
               </label>
               <label style={labelStyle}>
-                Planned Cost
-                <input type="number" value={budgetAmount} onChange={(e) => setBudgetAmount(e.target.value)} placeholder="0.00" style={inputStyle} />
+                Enter as
+                <select value={budgetCostMode} onChange={(e) => setBudgetCostMode(e.target.value as "total" | "per_person")} style={inputStyle}>
+                  <option value="total">Total cost</option>
+                  <option value="per_person">Per person</option>
+                </select>
               </label>
               <label style={labelStyle}>
-                Actual Cost
+                Split
+                <select value={budgetSplitType} onChange={(e) => setBudgetSplitType(e.target.value as CostSplitType)} style={inputStyle}>
+                  <option value="even">Even split</option>
+                  <option value="custom">Custom split</option>
+                </select>
+              </label>
+              <label style={labelStyle}>
+                {budgetCostMode === "per_person" ? "Planned Cost (per person)" : "Planned Cost"}
+                <input type="number" value={budgetAmount} onChange={(e) => setBudgetAmount(e.target.value)} placeholder="0.00" style={inputStyle} />
+                {budgetCostMode === "per_person" && budgetAttendeeCount > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, display: "block" }}>
+                    Total: ${plannedTotalPreview.toFixed(2)} ({budgetAttendeeCount} attendee{budgetAttendeeCount === 1 ? "" : "s"})
+                  </span>
+                )}
+              </label>
+              <label style={labelStyle}>
+                {budgetCostMode === "per_person" ? "Actual Cost (per person)" : "Actual Cost"}
                 <input type="number" value={budgetActualAmount} onChange={(e) => setBudgetActualAmount(e.target.value)} placeholder="0.00" style={inputStyle} />
+                {budgetCostMode === "per_person" && budgetAttendeeCount > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, display: "block" }}>
+                    Total: ${actualTotalPreview.toFixed(2)} ({budgetAttendeeCount} attendee{budgetAttendeeCount === 1 ? "" : "s"})
+                  </span>
+                )}
               </label>
               <label style={labelStyle}>
                 Responsible
@@ -367,6 +435,16 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
                 </select>
               </label>
             </div>
+            {budgetCostMode === "per_person" && budgetAttendeeCount === 0 && (
+              <p style={{ fontSize: "var(--font-xs)", color: "var(--color-text-secondary)", marginTop: 6 }}>
+                Per-person mode uses attendee count when this is linked to an event with attendees.
+              </p>
+            )}
+            {budgetSplitType === "custom" && (
+              <p style={{ fontSize: "var(--font-xs)", color: "var(--color-text-secondary)", marginTop: 6 }}>
+                Custom split is saved. You can define per-person amounts in the budget item after creating.
+              </p>
+            )}
             <label style={{ ...labelStyle, display: "block", marginTop: 8 }}>
               Notes (optional)
               <textarea
@@ -389,16 +467,16 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
             : `Will create ${entityCount} linked item${entityCount > 1 ? "s" : ""}`}
         </p>
         <div className="flex gap-2">
-          <button onClick={onClose} style={secondaryBtnStyle}>Cancel</button>
+          <button onClick={onClose} disabled={submitting} style={secondaryBtnStyle}>Cancel</button>
           <button
-            onClick={handleSubmit}
-            disabled={!title.trim() || entityCount === 0}
+            onClick={() => void handleSubmit()}
+            disabled={submitting || !title.trim() || entityCount === 0}
             style={{
               ...primaryBtnStyle,
-              opacity: !title.trim() || entityCount === 0 ? 0.5 : 1,
+              opacity: submitting || !title.trim() || entityCount === 0 ? 0.5 : 1,
             }}
           >
-            Create
+            {submitting ? "Creating..." : "Create"}
           </button>
         </div>
       </div>

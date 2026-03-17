@@ -38,6 +38,7 @@ export interface Repository {
     userId: string,
     patch: Partial<Membership>,
   ): void;
+  removeGuestFromTrip(tripId: string, userId: string): void;
 
   // Events
   getEvents(tripId: string): TripEvent[];
@@ -84,6 +85,7 @@ export interface Repository {
   claimInvite(token: string, claimedAt: string): void;
   // Moodboard Notes
   getMoodboardNotes(tripId: string): MoodboardNote[];
+  setMoodboardNotes(tripId: string, notes: MoodboardNote[]): void;
   addMoodboardNote(note: MoodboardNote): void;
   updateMoodboardNote(noteId: string, patch: Partial<MoodboardNote>): void;
   deleteMoodboardNote(noteId: string): void;

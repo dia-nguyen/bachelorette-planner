@@ -10,9 +10,18 @@ interface HeaderBarProps {
   onRestoreDemo?: () => void;
   onExportJSON?: () => void;
   onImportJSON?: (json: string) => void;
+  onSignOut?: () => void;
 }
 
-export function HeaderBar({ title, onAddItem, onClearAll, onRestoreDemo, onExportJSON, onImportJSON }: HeaderBarProps) {
+export function HeaderBar({
+  title,
+  onAddItem,
+  onClearAll,
+  onRestoreDemo,
+  onExportJSON,
+  onImportJSON,
+  onSignOut,
+}: HeaderBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,7 +129,17 @@ export function HeaderBar({ title, onAddItem, onClearAll, onRestoreDemo, onExpor
                   />
                 </>
               )}
-              {(onExportJSON || onImportJSON) && (onClearAll || onRestoreDemo) && (
+              {(onExportJSON || onImportJSON) && (onSignOut || onClearAll || onRestoreDemo) && (
+                <div style={{ height: 1, background: "var(--color-border)", margin: "4px 0" }} />
+              )}
+              {onSignOut && (
+                <MenuAction
+                  label="Log Out"
+                  description="Sign out of your account"
+                  onClick={() => { onSignOut(); setMenuOpen(false); }}
+                />
+              )}
+              {onSignOut && (onClearAll || onRestoreDemo) && (
                 <div style={{ height: 1, background: "var(--color-border)", margin: "4px 0" }} />
               )}
               {onClearAll && (

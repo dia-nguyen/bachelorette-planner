@@ -643,5 +643,6 @@ export const initialDemoStore: DemoStore = {
   checklistItems: demoChecklistItems,
   polls: demoPolls,
   photos: demoPhotos,
+  invites: [],
   moodboardNotes: demoMoodboardNotes,
 };

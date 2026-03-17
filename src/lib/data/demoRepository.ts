@@ -1,9 +1,11 @@
+import { normalizeNoteImages } from "@/lib/moodboard/images";
 import { type DemoStore, initialDemoStore } from "./demoData";
 import type { Repository } from "./repository";
 import type {
   BudgetItem,
   ChecklistItem,
   GuestFieldDef,
+  Invite,
   Membership,
   MoodboardNote,
   Photo,
@@ -26,6 +28,7 @@ function loadStore(): DemoStore {
       if (!parsed.checklistItems) parsed.checklistItems = [];
       if (!parsed.polls) parsed.polls = [];
       if (!parsed.photos) parsed.photos = [];
+      if (!parsed.invites) parsed.invites = [];
       if (!parsed.moodboardNotes) parsed.moodboardNotes = [];
       return parsed;
     }
@@ -175,6 +178,19 @@ export const demoRepository: Repository = {
       notify();
     }
   },
+  removeGuestFromTrip(tripId: string, userId: string): void {
+    const s = getStore();
+    s.memberships = s.memberships.filter(
+      (m) => !(m.tripId === tripId && m.userId === userId),
+    );
+
+    const hasOtherMemberships = s.memberships.some((m) => m.userId === userId);
+    if (!hasOtherMemberships) {
+      s.users = s.users.filter((u) => u.id !== userId);
+    }
+
+    notify();
+  },
 
   // Events
   getEvents(tripId: string): TripEvent[] {
@@ -309,9 +325,39 @@ export const demoRepository: Repository = {
     notify();
   },
 
+  // Invites
+  getInvites(tripId: string): Invite[] {
+    return getStore().invites.filter((invite) => invite.tripId === tripId);
+  },
+  addInvite(invite: Invite): void {
+    getStore().invites.push(invite);
+    notify();
+  },
+  getInviteByToken(token: string): Invite | undefined {
+    return getStore().invites.find((invite) => invite.token === token);
+  },
+  claimInvite(token: string, claimedAt: string): void {
+    const s = getStore();
+    const idx = s.invites.findIndex((invite) => invite.token === token);
+    if (idx !== -1) {
+      s.invites[idx] = { ...s.invites[idx], claimedAt };
+      notify();
+    }
+  },
+
   // Moodboard Notes
   getMoodboardNotes(tripId: string): MoodboardNote[] {
-    return getStore().moodboardNotes.filter((n) => n.tripId === tripId);
+    return getStore().moodboardNotes
+      .filter((n) => n.tripId === tripId)
+      .map(migrateNoteImages);
+  },
+  setMoodboardNotes(tripId: string, notes: MoodboardNote[]): void {
+    const s = getStore();
+    s.moodboardNotes = [
+      ...s.moodboardNotes.filter((n) => n.tripId !== tripId),
+      ...notes,
+    ];
+    notify();
   },
   addMoodboardNote(note: MoodboardNote): void {
     getStore().moodboardNotes.push(note);
@@ -331,3 +377,31 @@ export const demoRepository: Repository = {
     notify();
   },
 };
+
+/** Migrate old single-image notes to the images[] array format */
+function migrateNoteImages(note: MoodboardNote): MoodboardNote {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = note as any;
+  if (!note.images && raw.imageDataUrl) {
+    return {
+      ...note,
+      images: normalizeNoteImages(
+        [{
+          id: crypto.randomUUID(),
+          dataUrl: raw.imageDataUrl,
+          width: raw.imageWidth ?? null,
+          x: 0,
+          y: 0,
+        }],
+        note.width,
+      ),
+    };
+  }
+  if (!note.images) {
+    return { ...note, images: [] };
+  }
+  return {
+    ...note,
+    images: normalizeNoteImages(note.images, note.width),
+  };
+}
