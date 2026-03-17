@@ -48,6 +48,7 @@ interface StickyNoteProps {
   onBringToFront: (id: string) => void;
   onUploadImage: (noteId: string, file: File) => Promise<NoteImageType>;
   canvasScale: number;
+  isReadOnly?: boolean;
 }
 
 const MIN_WIDTH = 200;
@@ -61,6 +62,7 @@ export function StickyNote({
   onBringToFront,
   onUploadImage,
   canvasScale,
+  isReadOnly = false,
 }: StickyNoteProps) {
   const noteRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -231,6 +233,7 @@ export function StickyNote({
 
   const handleDragStart = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (isReadOnly) return;
       const target = e.target as HTMLElement;
       if (
         target.closest("input, textarea, button, [data-note-image='true'], [data-resize='true']")
@@ -249,7 +252,7 @@ export function StickyNote({
       };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [canvasScale, note.id, note.x, note.y, onBringToFront],
+    [canvasScale, isReadOnly, note.id, note.x, note.y, onBringToFront],
   );
 
   const handleDragMove = useCallback(
@@ -269,6 +272,7 @@ export function StickyNote({
 
   const handleResizeStart = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (isReadOnly) return;
       e.preventDefault();
       e.stopPropagation();
       onBringToFront(note.id);
@@ -281,7 +285,7 @@ export function StickyNote({
       };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [note.height, note.id, note.width, onBringToFront],
+    [isReadOnly, note.height, note.id, note.width, onBringToFront],
   );
 
   const handleResizeMove = useCallback(
@@ -307,6 +311,7 @@ export function StickyNote({
 
   const handlePaste = useCallback(
     (e: ClipboardEvent) => {
+      if (isReadOnly) return;
       if (e.target !== textareaRef.current || document.activeElement !== textareaRef.current) {
         return;
       }
@@ -346,15 +351,16 @@ export function StickyNote({
         return;
       }
     },
-    [normalizedImages, note.id, note.width, onUpdate, onUploadImage],
+    [isReadOnly, normalizedImages, note.id, note.width, onUpdate, onUploadImage],
   );
 
   useEffect(() => {
+    if (isReadOnly) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.addEventListener("paste", handlePaste);
     return () => textarea.removeEventListener("paste", handlePaste);
-  }, [handlePaste]);
+  }, [handlePaste, isReadOnly]);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -404,10 +410,10 @@ export function StickyNote({
     <div
       ref={noteRef}
       data-sticky-note="true"
-      onPointerDown={handleDragStart}
-      onPointerMove={handleDragMove}
-      onPointerUp={handleDragEnd}
-      onPointerCancel={handleDragEnd}
+      onPointerDown={isReadOnly ? undefined : handleDragStart}
+      onPointerMove={isReadOnly ? undefined : handleDragMove}
+      onPointerUp={isReadOnly ? undefined : handleDragEnd}
+      onPointerCancel={isReadOnly ? undefined : handleDragEnd}
       style={{
         position: "absolute",
         left: note.x,
@@ -426,9 +432,10 @@ export function StickyNote({
         display: "flex",
         flexDirection: "column",
         overflow: isCanvasImage ? "visible" : "hidden",
-        cursor: isDragging ? "grabbing" : "grab",
+        cursor: isReadOnly ? "default" : isDragging ? "grabbing" : "grab",
         userSelect: isDragging ? "none" : "auto",
         transition: isDragging ? "none" : "box-shadow 0.2s",
+        pointerEvents: isReadOnly ? "none" : "auto",
       }}
     >
       {!isCanvasImage && (
@@ -443,6 +450,7 @@ export function StickyNote({
         >
           <input
             value={draftTitle}
+            readOnly={isReadOnly}
             onBlur={(e) => flushTitleSave(e.target.value)}
             onChange={(e) => setDraftTitle(e.target.value)}
             placeholder="Title"
@@ -458,42 +466,46 @@ export function StickyNote({
             }}
           />
 
-          <div style={{ display: "flex", gap: 2 }}>
-            {(Object.keys(COLOR_MAP) as StickyNoteColor[]).map((color) => (
-              <button
-                key={color}
-                onClick={() => onUpdate(note.id, { color })}
-                style={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: "50%",
-                  background: COLOR_MAP[color],
-                  border:
-                    color === note.color
-                      ? `2px solid ${COLOR_BORDER[color]}`
-                      : "1px solid #D1D5DB",
-                  cursor: "pointer",
-                  padding: 0,
-                }}
-              />
-            ))}
-          </div>
+          {!isReadOnly && (
+            <>
+              <div style={{ display: "flex", gap: 2 }}>
+                {(Object.keys(COLOR_MAP) as StickyNoteColor[]).map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => onUpdate(note.id, { color })}
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: "50%",
+                      background: COLOR_MAP[color],
+                      border:
+                        color === note.color
+                          ? `2px solid ${COLOR_BORDER[color]}`
+                          : "1px solid #D1D5DB",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  />
+                ))}
+              </div>
 
-          <button
-            onClick={() => onDelete(note.id)}
-            title="Delete note"
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: 16,
-              lineHeight: 1,
-              color: "#9CA3AF",
-              padding: "0 2px",
-            }}
-          >
-            ×
-          </button>
+              <button
+                onClick={() => onDelete(note.id)}
+                title="Delete note"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  lineHeight: 1,
+                  color: "#9CA3AF",
+                  padding: "0 2px",
+                }}
+              >
+                ×
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -510,6 +522,7 @@ export function StickyNote({
           <textarea
             ref={textareaRef}
             value={draftText}
+            readOnly={isReadOnly}
             onBlur={(e) => flushTextSave(e.target.value)}
             onChange={(e) => {
               setDraftText(e.target.value);
@@ -571,30 +584,32 @@ export function StickyNote({
               }}
             />
 
-            <button
-              onClick={() => onDelete(note.id)}
-              title="Delete image"
-              style={{
-                position: "absolute",
-                top: 6,
-                right: 6,
-                background: "rgba(0,0,0,0.6)",
-                color: "#fff",
-                border: "none",
-                borderRadius: "50%",
-                width: 22,
-                height: 22,
-                fontSize: 14,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                lineHeight: 1,
-                boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-              }}
-            >
-              ×
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => onDelete(note.id)}
+                title="Delete image"
+                style={{
+                  position: "absolute",
+                  top: 6,
+                  right: 6,
+                  background: "rgba(0,0,0,0.6)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: 22,
+                  height: 22,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                }}
+              >
+                ×
+              </button>
+            )}
           </div>
         )}
 
@@ -619,6 +634,7 @@ export function StickyNote({
                   borderColor={border}
                   canvasScale={canvasScale}
                   stageWidth={interactiveStageWidth}
+                  isReadOnly={isReadOnly}
                   onRemove={handleRemoveImage}
                   onChange={handleChangeImage}
                   onImageRatioChange={handleImageRatioChange}
@@ -630,33 +646,35 @@ export function StickyNote({
         )}
       </div>
 
-      <div
-        data-resize="true"
-        onPointerDown={handleResizeStart}
-        onPointerMove={handleResizeMove}
-        onPointerUp={handleResizeEnd}
-        onPointerCancel={handleResizeEnd}
-        style={{
-          position: "absolute",
-          right: 0,
-          bottom: 0,
-          width: 16,
-          height: 16,
-          cursor: "nwse-resize",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill={border} opacity={0.5}>
-          <path
-            d="M9 1L1 9M9 5L5 9M9 9L9 9"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            fill="none"
-          />
-        </svg>
-      </div>
+      {!isReadOnly && (
+        <div
+          data-resize="true"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          style={{
+            position: "absolute",
+            right: 0,
+            bottom: 0,
+            width: 16,
+            height: 16,
+            cursor: "nwse-resize",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill={border} opacity={0.5}>
+            <path
+              d="M9 1L1 9M9 5L5 9M9 9L9 9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              fill="none"
+            />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
@@ -667,6 +685,7 @@ interface NoteImageProps {
   borderColor: string;
   canvasScale: number;
   stageWidth: number;
+  isReadOnly: boolean;
   onRemove: (id: string) => void;
   onChange: (id: string, patch: Partial<NoteImageType>) => void;
   onImageRatioChange: (id: string, ratio: number) => void;
@@ -679,6 +698,7 @@ function NoteImage({
   borderColor,
   canvasScale,
   stageWidth,
+  isReadOnly,
   onRemove,
   onChange,
   onImageRatioChange,
@@ -699,6 +719,7 @@ function NoteImage({
 
   const handleDragStart = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (isReadOnly) return;
       const target = e.target as HTMLElement;
       if (target.closest("[data-image-control='true']")) return;
 
@@ -715,7 +736,7 @@ function NoteImage({
       };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [image.id, image.x, image.y, imageWidth, onSelect],
+    [image.id, image.x, image.y, imageWidth, isReadOnly, onSelect],
   );
 
   const handleDragMove = useCallback(
@@ -743,6 +764,7 @@ function NoteImage({
 
   const handleCornerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (isReadOnly) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -756,7 +778,7 @@ function NoteImage({
       };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [image.x, imageWidth],
+    [image.x, imageWidth, isReadOnly],
   );
 
   const handleCornerMove = useCallback(
@@ -805,17 +827,17 @@ function NoteImage({
   return (
     <div
       data-note-image="true"
-      onPointerDown={handleDragStart}
-      onPointerMove={handleDragMove}
-      onPointerUp={handleDragEnd}
-      onPointerCancel={handleDragEnd}
+      onPointerDown={isReadOnly ? undefined : handleDragStart}
+      onPointerMove={isReadOnly ? undefined : handleDragMove}
+      onPointerUp={isReadOnly ? undefined : handleDragEnd}
+      onPointerCancel={isReadOnly ? undefined : handleDragEnd}
       style={{
         position: "absolute",
         left: image.x,
         top: image.y,
         width: imageWidth,
-        cursor: isDragging ? "grabbing" : "grab",
-        touchAction: "none",
+        cursor: isReadOnly ? "default" : isDragging ? "grabbing" : "grab",
+        touchAction: isReadOnly ? "auto" : "none",
       }}
     >
       <img
@@ -837,34 +859,37 @@ function NoteImage({
         }}
       />
 
-      <button
-        data-image-control="true"
-        onClick={() => onRemove(image.id)}
-        title="Remove image"
-        style={{
-          position: "absolute",
-          top: 4,
-          right: 4,
-          background: "rgba(0,0,0,0.6)",
-          color: "#fff",
-          border: "none",
-          borderRadius: "50%",
-          width: 22,
-          height: 22,
-          fontSize: 14,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          lineHeight: 1,
-          zIndex: 3,
-          boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-        }}
-      >
-        ×
-      </button>
+      {!isReadOnly && (
+        <button
+          data-image-control="true"
+          onClick={() => onRemove(image.id)}
+          title="Remove image"
+          style={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            background: "rgba(0,0,0,0.6)",
+            color: "#fff",
+            border: "none",
+            borderRadius: "50%",
+            width: 22,
+            height: 22,
+            fontSize: 14,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 1,
+            zIndex: 3,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+          }}
+        >
+          ×
+        </button>
+      )}
 
       {isSelected &&
+        !isReadOnly &&
         (
           ["top-left", "top-right", "bottom-left", "bottom-right"] as const
         ).map((corner) => {

@@ -74,10 +74,10 @@ export function ItineraryView() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Header */}
       <div>
-        <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
+        <p className="hidden sm:block" style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
           Day-by-day schedule of planned, confirmed, and timed draft events
         </p>
       </div>
@@ -85,7 +85,7 @@ export function ItineraryView() {
       {dayGroups.map((group, idx) => (
         <div key={group.key}>
           {/* Day header */}
-          <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3" style={{ marginBottom: 10 }}>
             <div
               style={{
                 width: 28,
@@ -125,7 +125,7 @@ export function ItineraryView() {
           <div
             className="flex flex-col gap-3"
             style={{
-              paddingLeft: 20,
+              paddingLeft: 12,
               borderLeft: `2px solid ${group.events.length > 0 ? "var(--color-accent-soft)" : "var(--color-border)"}`,
               marginLeft: 13,
               minHeight: group.events.length === 0 ? 40 : undefined,
@@ -152,8 +152,8 @@ export function ItineraryView() {
                   onClick={() => openPanel("event", ev.id)}
                   style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}
                 >
-                  <Card>
-                    <div className="flex items-start justify-between gap-3">
+                  <Card style={{ padding: "clamp(14px, 3.5vw, var(--space-lg))" }}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                       <div className="flex-1" style={{ minWidth: 0 }}>
                         {/* Time range */}
                         <p
@@ -168,7 +168,7 @@ export function ItineraryView() {
                           {ev.endAt && ` – ${formatTime(ev.endAt)}`}
                         </p>
                         {/* Title */}
-                        <p style={{ fontSize: "var(--font-lg)", fontWeight: 600, margin: 0 }}>
+                        <p style={{ fontSize: "clamp(16px, 4.4vw, var(--font-lg))", fontWeight: 600, margin: 0, lineHeight: 1.2 }}>
                           {ev.title}
                         </p>
                         {/* Location */}
@@ -178,6 +178,7 @@ export function ItineraryView() {
                               fontSize: "var(--font-sm)",
                               color: "var(--color-text-secondary)",
                               marginTop: 4,
+                              wordBreak: "break-word",
                             }}
                           >
                             📍 {ev.location}
@@ -203,14 +204,14 @@ export function ItineraryView() {
                           </p>
                         )}
                       </div>
-                      <div className="flex flex-col items-end gap-2">
+                      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-2">
                         <Badge variant={eventStatusVariant(ev.status)}>{ev.status}</Badge>
                         {/* Attendee avatars */}
                         {attendees.length > 0 && (
-                          <div className="flex" style={{ marginTop: 4 }}>
-                            {attendees.slice(0, 5).map((u) => (
-                              <div key={u.id} style={{ marginLeft: -6 }} title={u.name}>
-                                <Avatar name={u.name} color={u.avatarColor} size={24} />
+                          <div className="flex" style={{ marginTop: 0 }}>
+                            {attendees.slice(0, 5).map((u, i) => (
+                              <div key={u.id} style={{ marginLeft: i === 0 ? 0 : -6 }} title={u.name}>
+                                <Avatar name={u.name} color={u.avatarColor} size={20} />
                               </div>
                             ))}
                             {attendees.length > 5 && (
@@ -232,13 +233,13 @@ export function ItineraryView() {
                     {/* Booking info */}
                     {(ev.provider || ev.confirmationCode) && (
                       <div
+                        className="flex flex-col sm:flex-row"
                         style={{
                           marginTop: 10,
                           paddingTop: 8,
                           borderTop: "1px solid var(--color-border)",
                           fontSize: "var(--font-sm)",
                           color: "var(--color-text-secondary)",
-                          display: "flex",
                           gap: 16,
                         }}
                       >

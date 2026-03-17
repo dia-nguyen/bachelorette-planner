@@ -108,11 +108,12 @@ export function PollsView() {
 
   const onVote = (poll: Poll, optionId: string) => {
     if (poll.isClosed) return;
+    const selectedOptionId = getUserVoteOptionId(poll, currentUserId);
     const nextOptions = poll.options.map((option) => ({
       ...option,
       voterUserIds: option.voterUserIds.filter((id) => id !== currentUserId),
     })).map((option) => (
-      option.id === optionId
+      option.id === optionId && selectedOptionId !== optionId
         ? { ...option, voterUserIds: [...option.voterUserIds, currentUserId] }
         : option
     ));
@@ -121,9 +122,8 @@ export function PollsView() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Polls</h2>
           <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
             Group decisions, anonymous or public voting, and required responders.
           </p>
@@ -153,7 +153,7 @@ export function PollsView() {
 
             return (
               <Card key={poll.id} style={{ width: "100%" }}>
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700 }}>{poll.question}</h3>
                     <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
@@ -178,7 +178,7 @@ export function PollsView() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {isAdmin && (
                       <button
                         onClick={() => updatePoll(poll.id, { isClosed: !poll.isClosed })}
@@ -344,8 +344,8 @@ export function PollsView() {
                 <p style={{ fontSize: "var(--font-sm)", fontWeight: 600, marginBottom: 6 }}>Options</p>
                 <div className="flex flex-col gap-2">
                   {options.map((option, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className="grid gap-2" style={{ flex: 1, gridTemplateColumns: "1fr 1fr 1fr" }}>
+                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <div className="grid gap-2 w-full sm:grid-cols-2 md:grid-cols-3" style={{ flex: 1 }}>
                         <input
                           value={option.label}
                           onChange={(e) => setOptions((prev) => prev.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}

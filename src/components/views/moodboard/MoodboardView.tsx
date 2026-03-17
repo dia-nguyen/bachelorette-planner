@@ -22,6 +22,7 @@ const MIN_ZOOM_STEP = 0.02;
 const MAX_ZOOM_STEP = 0.08;
 const DEFAULT_PASTED_NOTE_WIDTH = 320;
 const DEFAULT_PASTED_NOTE_HEIGHT = 280;
+const MOBILE_BREAKPOINT_QUERY = "(max-width: 768px)";
 
 const NOTE_COLORS: StickyNoteColor[] = [
   "yellow",
@@ -47,6 +48,7 @@ export function MoodboardView() {
   const [offset, setOffset] = useState({ x: -CANVAS_SIZE / 2 + 400, y: -CANVAS_SIZE / 2 + 300 });
   const [scale, setScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
+  const [isMobileReadOnly, setIsMobileReadOnly] = useState(false);
   const [isPastingImage, setIsPastingImage] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
@@ -97,7 +99,16 @@ export function MoodboardView() {
 
   // Keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z (or Cmd on Mac)
   useEffect(() => {
+    const media = window.matchMedia(MOBILE_BREAKPOINT_QUERY);
+    const sync = () => setIsMobileReadOnly(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isMobileReadOnly) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -112,14 +123,14 @@ export function MoodboardView() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo]);
+  }, [isMobileReadOnly, undo, redo]);
 
   // ---- Pan ----
   const handlePanStart = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement;
       const clickedNote = target.closest("[data-sticky-note='true']");
-      if (clickedNote) return;
+      if (clickedNote && !isMobileReadOnly) return;
       if (e.button !== 0 && e.button !== 1) return;
       e.preventDefault();
       viewportRef.current?.focus();
@@ -132,7 +143,7 @@ export function MoodboardView() {
       };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [offset],
+    [isMobileReadOnly, offset],
   );
 
   const handlePanMove = useCallback(
@@ -290,6 +301,7 @@ export function MoodboardView() {
   );
 
   useEffect(() => {
+    if (isMobileReadOnly) return;
     const handlePaste = (event: ClipboardEvent) => {
       const activeElement = document.activeElement as HTMLElement | null;
       if (
@@ -311,7 +323,7 @@ export function MoodboardView() {
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [handleCanvasPasteImage]);
+  }, [handleCanvasPasteImage, isMobileReadOnly]);
 
   // ---- Bring to front ----
   const handleBringToFront = useCallback(
@@ -372,196 +384,197 @@ export function MoodboardView() {
         borderRadius: "var(--radius-lg)",
       }}
     >
-      {/* Toolbar */}
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          left: 12,
-          zIndex: 1000,
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          background: "white",
-          borderRadius: 8,
-          padding: "6px 12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-        }}
-      >
-        {/* Add note buttons for each color */}
-        {NOTE_COLORS.map((color) => (
+      {!isMobileReadOnly && (
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            zIndex: 1000,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            background: "white",
+            borderRadius: 8,
+            padding: "6px 12px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          }}
+        >
+          {/* Add note buttons for each color */}
+          {NOTE_COLORS.map((color) => (
+            <button
+              key={color}
+              onClick={() => handleAddNote(color)}
+              title={`Add ${color} note`}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                border: "1px solid #D1D5DB",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 16,
+                background:
+                  color === "yellow"
+                    ? "#FEF3C7"
+                    : color === "pink"
+                      ? "#FCE7F3"
+                      : color === "blue"
+                        ? "#DBEAFE"
+                        : color === "green"
+                          ? "#D1FAE5"
+                          : color === "purple"
+                            ? "#EDE9FE"
+                            : "#FFEDD5",
+              }}
+            >
+              +
+            </button>
+          ))}
+
+          <div
+            style={{
+              width: 1,
+              height: 20,
+              background: "#E5E7EB",
+              margin: "0 4px",
+            }}
+          />
+
+          {/* Undo / Redo */}
           <button
-            key={color}
-            onClick={() => handleAddNote(color)}
-            title={`Add ${color} note`}
+            onClick={undo}
+            title="Undo (Ctrl+Z)"
             style={{
               width: 28,
               height: 28,
               borderRadius: 6,
               border: "1px solid #D1D5DB",
+              background: "white",
               cursor: "pointer",
+              fontSize: 16,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              opacity: canUndo ? 1 : 0.35,
+            }}
+          >
+            ↩
+          </button>
+          <button
+            onClick={redo}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: "1px solid #D1D5DB",
+              background: "white",
+              cursor: "pointer",
               fontSize: 16,
-              background:
-                color === "yellow"
-                  ? "#FEF3C7"
-                  : color === "pink"
-                    ? "#FCE7F3"
-                    : color === "blue"
-                      ? "#DBEAFE"
-                      : color === "green"
-                        ? "#D1FAE5"
-                        : color === "purple"
-                          ? "#EDE9FE"
-                          : "#FFEDD5",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: canRedo ? 1 : 0.35,
+            }}
+          >
+            ↪
+          </button>
+
+          <div
+            style={{
+              width: 1,
+              height: 20,
+              background: "#E5E7EB",
+              margin: "0 4px",
+            }}
+          />
+
+          {/* Zoom controls */}
+          <button
+            onClick={zoomOut}
+            title="Zoom out"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: "1px solid #D1D5DB",
+              background: "white",
+              cursor: "pointer",
+              fontSize: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            −
+          </button>
+          <span
+            style={{
+              fontSize: 12,
+              color: "#6B7280",
+              minWidth: 40,
+              textAlign: "center",
+            }}
+          >
+            {Math.round(scale * 100)}%
+          </span>
+          <button
+            onClick={zoomIn}
+            title="Zoom in"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: "1px solid #D1D5DB",
+              background: "white",
+              cursor: "pointer",
+              fontSize: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             +
           </button>
-        ))}
+          <button
+            onClick={resetView}
+            title="Reset view"
+            style={{
+              padding: "4px 8px",
+              borderRadius: 6,
+              border: "1px solid #D1D5DB",
+              background: "white",
+              cursor: "pointer",
+              fontSize: 11,
+              color: "#6B7280",
+            }}
+          >
+            Reset
+          </button>
 
-        <div
-          style={{
-            width: 1,
-            height: 20,
-            background: "#E5E7EB",
-            margin: "0 4px",
-          }}
-        />
+          <div
+            style={{
+              width: 1,
+              height: 20,
+              background: "#E5E7EB",
+              margin: "0 4px",
+            }}
+          />
 
-        {/* Undo / Redo */}
-        <button
-          onClick={undo}
-          title="Undo (Ctrl+Z)"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: "1px solid #D1D5DB",
-            background: "white",
-            cursor: "pointer",
-            fontSize: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: canUndo ? 1 : 0.35,
-          }}
-        >
-          ↩
-        </button>
-        <button
-          onClick={redo}
-          title="Redo (Ctrl+Shift+Z)"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: "1px solid #D1D5DB",
-            background: "white",
-            cursor: "pointer",
-            fontSize: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: canRedo ? 1 : 0.35,
-          }}
-        >
-          ↪
-        </button>
-
-        <div
-          style={{
-            width: 1,
-            height: 20,
-            background: "#E5E7EB",
-            margin: "0 4px",
-          }}
-        />
-
-        {/* Zoom controls */}
-        <button
-          onClick={zoomOut}
-          title="Zoom out"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: "1px solid #D1D5DB",
-            background: "white",
-            cursor: "pointer",
-            fontSize: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          −
-        </button>
-        <span
-          style={{
-            fontSize: 12,
-            color: "#6B7280",
-            minWidth: 40,
-            textAlign: "center",
-          }}
-        >
-          {Math.round(scale * 100)}%
-        </span>
-        <button
-          onClick={zoomIn}
-          title="Zoom in"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: "1px solid #D1D5DB",
-            background: "white",
-            cursor: "pointer",
-            fontSize: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          +
-        </button>
-        <button
-          onClick={resetView}
-          title="Reset view"
-          style={{
-            padding: "4px 8px",
-            borderRadius: 6,
-            border: "1px solid #D1D5DB",
-            background: "white",
-            cursor: "pointer",
-            fontSize: 11,
-            color: "#6B7280",
-          }}
-        >
-          Reset
-        </button>
-
-        <div
-          style={{
-            width: 1,
-            height: 20,
-            background: "#E5E7EB",
-            margin: "0 4px",
-          }}
-        />
-
-        <span
-          style={{
-            fontSize: 11,
-            color: pasteError ? "#B91C1C" : "#6B7280",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {isPastingImage ? "Pasting image..." : pasteError ?? "Paste images on the canvas"}
-        </span>
-      </div>
+          <span
+            style={{
+              fontSize: 11,
+              color: pasteError ? "#B91C1C" : "#6B7280",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {isPastingImage ? "Pasting image..." : pasteError ?? "Paste images on the canvas"}
+          </span>
+        </div>
+      )}
 
       {/* Note count indicator */}
       <div
@@ -580,6 +593,30 @@ export function MoodboardView() {
       >
         {moodboardNotes.length} note{moodboardNotes.length !== 1 ? "s" : ""}
       </div>
+
+      {isMobileReadOnly && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            bottom: 12,
+            transform: "translateX(-50%)",
+            zIndex: 1000,
+            background: "rgba(17,24,39,0.78)",
+            color: "#F9FAFB",
+            borderRadius: 999,
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 0.2,
+            pointerEvents: "none",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Mobile view only
+        </div>
+      )}
 
       {/* Canvas viewport */}
       <div
@@ -620,6 +657,7 @@ export function MoodboardView() {
               onBringToFront={handleBringToFront}
               onUploadImage={uploadMoodboardImage}
               canvasScale={scale}
+              isReadOnly={isMobileReadOnly}
             />
           ))}
         </div>
@@ -643,9 +681,15 @@ export function MoodboardView() {
             Moodboard
           </div>
           <div style={{ fontSize: 13 }}>
-            Click a colored button above to add your first sticky note.
-            <br />
-            Drag the canvas to pan, scroll to zoom, or paste an image.
+            {isMobileReadOnly
+              ? "Drag the canvas to explore."
+              : (
+                <>
+                  Click a colored button above to add your first sticky note.
+                  <br />
+                  Drag the canvas to pan, scroll to zoom, or paste an image.
+                </>
+              )}
           </div>
         </div>
       )}
