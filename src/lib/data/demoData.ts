@@ -580,11 +580,14 @@ export const demoPolls: Poll[] = [
     question: "Which restaurant for Saturday dinner?",
     createdByUserId: "u1",
     options: [
-      { id: "po1", label: "Fancy Bistro", voterUserIds: ["u1", "u3"] },
-      { id: "po2", label: "Seaside Grill", voterUserIds: ["u2", "u4"] },
-      { id: "po3", label: "Sushi Palace", voterUserIds: [] },
+      { id: "po1", label: "Fancy Bistro", voterUserIds: ["u1", "u3"], link: "https://www.opentable.com" },
+      { id: "po2", label: "Seaside Grill", voterUserIds: ["u2", "u4"], link: "https://www.yelp.com" },
+      { id: "po3", label: "Sushi Palace", voterUserIds: [], link: "https://www.tripadvisor.com" },
     ],
     isClosed: false,
+    visibility: "public",
+    requiredUserIds: ["u1", "u2", "u3", "u4"],
+    createdAt: "2026-02-27T18:00:00.000Z",
   },
   {
     id: "poll2",
@@ -597,6 +600,9 @@ export const demoPolls: Poll[] = [
       { id: "po6", label: "All White", voterUserIds: [] },
     ],
     isClosed: false,
+    visibility: "anonymous",
+    requiredUserIds: ["u2", "u3", "u4"],
+    createdAt: "2026-03-01T18:00:00.000Z",
   },
   {
     id: "poll3",
@@ -609,6 +615,9 @@ export const demoPolls: Poll[] = [
       { id: "po9", label: "3:00 PM", voterUserIds: [] },
     ],
     isClosed: true,
+    visibility: "public",
+    requiredUserIds: ["u1", "u2", "u3", "u4"],
+    createdAt: "2026-03-05T18:00:00.000Z",
   },
 ];
 

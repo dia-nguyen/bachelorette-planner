@@ -105,7 +105,6 @@ export function BudgetView() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Budget</h2>
           <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
             {selectedUserId === "all"
               ? `${formatCurrency(totalActual)} spent of ${formatCurrency(totalPlanned)} planned`

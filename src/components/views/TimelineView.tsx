@@ -43,7 +43,6 @@ export function TimelineView() {
   if (events.length === 0) {
     return (
       <div className="flex flex-col gap-4">
-        <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Timeline</h2>
         <EmptyState message="No events yet" actionLabel="Plan something with the + button above" />
       </div>
     );
@@ -52,7 +51,6 @@ export function TimelineView() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Timeline</h2>
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
           Day-by-day itinerary of all events
         </p>
@@ -130,9 +128,12 @@ export function TimelineView() {
                             fontSize: "var(--font-sm)",
                             color: "var(--color-text-secondary)",
                             marginTop: 6,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical",
                             overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            whiteSpace: "pre-line",
+                            wordBreak: "break-word",
                             maxWidth: 500,
                           }}>
                             {ev.description}

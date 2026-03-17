@@ -265,7 +265,11 @@ export interface PollOption {
   id: string;
   label: string;
   voterUserIds: string[];
+  link?: string;
+  pricePerPerson?: number;
 }
+
+export type PollVisibility = "anonymous" | "public";
 
 export interface Poll {
   id: string;
@@ -274,6 +278,9 @@ export interface Poll {
   createdByUserId: string;
   options: PollOption[];
   isClosed: boolean;
+  visibility: PollVisibility;
+  requiredUserIds: string[];
+  createdAt: string; // ISO
 }
 
 // ---- Photos ----

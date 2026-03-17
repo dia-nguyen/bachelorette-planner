@@ -5,7 +5,7 @@ import { BudgetDetail } from "@/components/panels/BudgetDetail";
 import { EventDetail } from "@/components/panels/EventDetail";
 import { TaskDetail } from "@/components/panels/TaskDetail";
 import { Badge, eventStatusVariant } from "@/components/ui";
-import { BudgetView, DashboardView, EventsView, GuestsView, ItineraryView, MoodboardView, SettingsView, TasksView } from "@/components/views";
+import { BudgetView, DashboardView, EventsView, GuestsView, ItineraryView, MoodboardView, PollsView, SettingsView, TasksView } from "@/components/views";
 import { PlanActivityForm } from "@/components/views/PlanActivityForm";
 import { useApp } from "@/lib/context";
 import { useAuth } from "@/lib/context/AuthContext";
@@ -143,6 +143,7 @@ export function AppShell() {
     itinerary: "Itinerary",
     guests: "Guests",
     budget: "Budget",
+    polls: "Polls",
     tasks: "Tasks",
     moodboard: "Moodboard",
     settings: "Settings",
@@ -409,7 +410,7 @@ export function AppShell() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <HeaderBar
           title={TAB_TITLES[activeTab] ?? "Dashboard"}
-          onAddItem={handleAddItem}
+          onAddItem={activeTab === "polls" ? undefined : handleAddItem}
           onClearAll={app.clearAllData}
           onRestoreDemo={app.resetDemoData}
           onExportJSON={app.exportData}
@@ -429,6 +430,7 @@ export function AppShell() {
               {activeTab === "itinerary" && <ItineraryView />}
               {activeTab === "guests" && <GuestsView />}
               {activeTab === "budget" && <BudgetView />}
+              {activeTab === "polls" && <PollsView />}
               {activeTab === "tasks" && <TasksView />}
               {activeTab === "moodboard" && <MoodboardView />}
               {activeTab === "settings" && <SettingsView />}

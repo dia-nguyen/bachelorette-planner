@@ -61,17 +61,7 @@ export function SettingsView() {
   return (
     <div style={{ maxWidth: 640 }}>
       <div style={{ marginBottom: 28 }}>
-        <h2
-          style={{
-            fontSize: "var(--font-xl)",
-            fontWeight: 700,
-            color: "var(--color-text-primary)",
-            margin: 0,
-          }}
-        >
-          Trip Settings
-        </h2>
-        <p style={{ fontSize: "var(--font-md)", color: "var(--color-text-secondary)", marginTop: 6 }}>
+        <p style={{ fontSize: "var(--font-md)", color: "var(--color-text-secondary)", margin: 0 }}>
           General information about your trip.
         </p>
       </div>

@@ -8,6 +8,16 @@ import { useMemo } from "react";
 /** Statuses considered "at least planned" */
 const ITINERARY_STATUSES = new Set(["PLANNED", "CONFIRMED"]);
 
+function hasValidDateTime(iso?: string): boolean {
+  if (!iso) return false;
+  return !Number.isNaN(new Date(iso).getTime());
+}
+
+function shouldIncludeInItinerary(status: string, startAt: string): boolean {
+  if (ITINERARY_STATUSES.has(status)) return true;
+  return status === "DRAFT" && hasValidDateTime(startAt);
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
@@ -43,9 +53,9 @@ export function ItineraryView() {
 
     const tripDays = dateRange(trip.startAt, trip.endAt);
 
-    // Filter to events with at least PLANNED status, sorted by start time
+    // Filter to planned/confirmed events + draft events that already have a start time.
     const qualifying = [...events]
-      .filter((e) => ITINERARY_STATUSES.has(e.status))
+      .filter((e) => shouldIncludeInItinerary(e.status, e.startAt))
       .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
     return tripDays.map((day) => {
@@ -58,7 +68,6 @@ export function ItineraryView() {
   if (!trip) {
     return (
       <div className="flex flex-col gap-4">
-        <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Itinerary</h2>
         <EmptyState message="No trip selected" />
       </div>
     );
@@ -68,9 +77,8 @@ export function ItineraryView() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Itinerary</h2>
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-          Day-by-day schedule of planned and confirmed events
+          Day-by-day schedule of planned, confirmed, and timed draft events
         </p>
       </div>
 
@@ -182,9 +190,12 @@ export function ItineraryView() {
                               fontSize: "var(--font-sm)",
                               color: "var(--color-text-secondary)",
                               marginTop: 6,
+                              display: "-webkit-box",
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: "vertical",
                               overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
+                              whiteSpace: "pre-line",
+                              wordBreak: "break-word",
                               maxWidth: 500,
                             }}
                           >

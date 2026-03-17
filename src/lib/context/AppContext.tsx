@@ -61,6 +61,48 @@ function mapTripRow(row: any): Trip {
   };
 }
 
+function normalizePoll(raw: Partial<Poll> & {
+  id: string;
+  tripId: string;
+  question: string;
+  createdByUserId: string;
+  options: Poll["options"];
+  isClosed: boolean;
+}): Poll {
+  const legacyPollLinks = Array.isArray((raw as { links?: unknown; }).links)
+    ? ((raw as { links?: string[]; }).links ?? [])
+    : [];
+  const normalizedOptions = Array.isArray(raw.options)
+    ? raw.options.map((option, index) => ({
+      ...option,
+      link: option.link ?? legacyPollLinks[index] ?? undefined,
+    }))
+    : [];
+
+  return {
+    ...raw,
+    options: normalizedOptions,
+    visibility: raw.visibility === "anonymous" ? "anonymous" : "public",
+    requiredUserIds: Array.isArray(raw.requiredUserIds) ? raw.requiredUserIds : [],
+    createdAt: raw.createdAt ?? "1970-01-01T00:00:00.000Z",
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPollRow(row: any): Poll {
+  return normalizePoll({
+    id: row.id,
+    tripId: row.trip_id ?? row.tripId,
+    question: row.question,
+    createdByUserId: row.created_by_user_id ?? row.createdByUserId,
+    options: (row.options ?? []) as Poll["options"],
+    isClosed: Boolean(row.is_closed ?? row.isClosed),
+    visibility: row.visibility as Poll["visibility"] | undefined,
+    requiredUserIds: (row.required_user_ids ?? row.requiredUserIds ?? []) as string[],
+    createdAt: row.created_at ?? row.createdAt,
+  });
+}
+
 interface SupabaseTripDataPayload {
   trip?: Record<string, unknown>;
   memberships?: Array<Record<string, unknown>>;
@@ -448,14 +490,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
         setSupabasePolls(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (data.polls ?? []).map((p: any) => ({
-            id: p.id,
-            tripId: p.trip_id,
-            question: p.question,
-            createdByUserId: p.created_by_user_id,
-            options: (p.options ?? []) as Poll["options"],
-            isClosed: p.is_closed,
-          })),
+          (data.polls ?? []).map(mapPollRow),
         );
 
         setSupabasePhotos(
@@ -590,7 +625,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const memberships = isSupabaseMode ? supabaseMemberships : demoMemberships;
   const users = isSupabaseMode ? supabaseUsers : demoUsers;
   const checklistItems = isSupabaseMode ? supabaseChecklistItems : demoChecklistItems;
-  const polls = isSupabaseMode ? supabasePolls : demoPolls;
+  const polls = (isSupabaseMode ? supabasePolls : demoPolls).map((poll) => normalizePoll(poll));
   const photos = isSupabaseMode ? supabasePhotos : demoPhotos;
   const moodboardNotes = isSupabaseMode ? supabaseMoodboardNotes : demoMoodboardNotes;
 
@@ -1009,17 +1044,85 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   // Polls
   const addPoll = useCallback(
     (data: Omit<Poll, "id" | "tripId">) => {
-      repo.addPoll({ ...data, id: uuid(), tripId });
+      if (isSupabaseMode && activeTripId) {
+        const newPoll = normalizePoll({ ...data, id: uuid(), tripId: activeTripId });
+        setSupabasePolls((prev) => [newPoll, ...prev]);
+        void (async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/polls`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...data, id: newPoll.id }),
+          });
+          if (!res.ok) {
+            throw new Error("Failed to create poll.");
+          }
+          const saved = await res.json();
+          setSupabasePolls((prev) => prev.map((poll) => (
+            poll.id === newPoll.id ? mapPollRow(saved) : poll
+          )));
+        })().catch((error) => {
+          console.error("[AppContext] Failed to create poll:", error);
+          setSupabasePolls((prev) => prev.filter((poll) => poll.id !== newPoll.id));
+        });
+        return;
+      }
+      repo.addPoll({ ...data, id: uuid(), tripId: effectiveTripId });
     },
-    [tripId]
+    [isSupabaseMode, activeTripId, effectiveTripId]
   );
   const updatePoll = useCallback(
-    (id: string, patch: Partial<Poll>) => repo.updatePoll(id, patch),
-    []
+    (id: string, patch: Partial<Poll>) => {
+      if (isSupabaseMode && activeTripId) {
+        const previous = supabasePolls.find((poll) => poll.id === id);
+        setSupabasePolls((prev) => prev.map((poll) => poll.id === id ? normalizePoll({ ...poll, ...patch }) : poll));
+        void (async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/polls`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, patch }),
+          });
+          if (!res.ok) {
+            throw new Error("Failed to update poll.");
+          }
+          const saved = await res.json();
+          setSupabasePolls((prev) => prev.map((poll) => (
+            poll.id === id ? mapPollRow(saved) : poll
+          )));
+        })().catch((error) => {
+          console.error("[AppContext] Failed to update poll:", error);
+          if (previous) {
+            setSupabasePolls((prev) => prev.map((poll) => (poll.id === id ? previous : poll)));
+          }
+        });
+        return;
+      }
+      repo.updatePoll(id, patch);
+    },
+    [isSupabaseMode, activeTripId, supabasePolls]
   );
   const deletePoll = useCallback(
-    (id: string) => repo.deletePoll(id),
-    []
+    (id: string) => {
+      if (isSupabaseMode && activeTripId) {
+        const previous = supabasePolls;
+        setSupabasePolls((prev) => prev.filter((poll) => poll.id !== id));
+        void (async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/polls`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          if (!res.ok) {
+            throw new Error("Failed to delete poll.");
+          }
+        })().catch((error) => {
+          console.error("[AppContext] Failed to delete poll:", error);
+          setSupabasePolls(previous);
+        });
+        return;
+      }
+      repo.deletePoll(id);
+    },
+    [isSupabaseMode, activeTripId, supabasePolls]
   );
 
   // Photos

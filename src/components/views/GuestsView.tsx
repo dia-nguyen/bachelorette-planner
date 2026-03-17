@@ -363,7 +363,6 @@ export function GuestsView() {
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Guests</h2>
         <div className="flex gap-2">
           {isAdmin && (
             <button

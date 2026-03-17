@@ -427,7 +427,7 @@ export function EventDetail({
         {event.description && (
           <div>
             <p style={{ fontWeight: 600, marginBottom: 8 }}>Description</p>
-            <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-md)", lineHeight: 1.5 }}>{event.description}</p>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-md)", lineHeight: 1.5, whiteSpace: "pre-line", wordBreak: "break-word" }}>{event.description}</p>
           </div>
         )}
 

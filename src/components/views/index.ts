@@ -5,5 +5,6 @@ export { GuestsView } from "./GuestsView";
 export { ItineraryView } from "./ItineraryView";
 export { MoodboardView } from "./moodboard";
 export { PlanActivityForm } from "./PlanActivityForm";
+export { PollsView } from "./PollsView";
 export { SettingsView } from "./SettingsView";
 export { TasksView } from "./TasksView";

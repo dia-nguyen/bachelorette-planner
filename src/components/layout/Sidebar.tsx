@@ -13,6 +13,7 @@ import {
   HiOutlineLogout,
   HiOutlineMap,
   HiOutlinePlus,
+  HiOutlineSpeakerphone,
   HiOutlineUsers,
   HiOutlineViewGrid,
 } from "react-icons/hi";
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { icon: <HiOutlineClipboardList size={22} />, label: "Tasks", id: "tasks" },
   { icon: <HiOutlineCalendar size={22} />, label: "Events", id: "events" },
   { icon: <HiOutlineCurrencyDollar size={22} />, label: "Budget", id: "budget" },
+  { icon: <HiOutlineSpeakerphone size={22} />, label: "Polls", id: "polls" },
   { icon: <HiOutlineColorSwatch size={22} />, label: "Moodboard", id: "moodboard" },
   { icon: <HiOutlineUsers size={22} />, label: "Guests", id: "guests" },
 ];
@@ -74,7 +76,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: Sideba
           }}
           onClick={() => setSwitcherOpen((o) => !o)}
         >
-          <Image src={`/app-icon.png`} alt={trip?.name ?? "Bachelorette Party Planner Icon"} width={200} height={200} />
+          <Image src={`/bach-party-logo.png`} alt={trip?.name ?? "Bachelorette Party Planner Icon"} width={200} height={200} />
         </button>
 
         {/* Dropdown */}

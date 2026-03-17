@@ -44,9 +44,12 @@ export function EventsView() {
                         fontSize: "var(--font-sm)",
                         color: "var(--color-text-secondary)",
                         marginTop: 8,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        whiteSpace: "pre-line",
+                        wordBreak: "break-word",
                       }}
                     >
                       {ev.description}

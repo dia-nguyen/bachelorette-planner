@@ -267,7 +267,7 @@ export function TaskDetail({
 
         <div>
           <p style={{ fontWeight: 600, marginBottom: 8 }}>Description</p>
-          <p style={{ color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+          <p style={{ color: "var(--color-text-secondary)", lineHeight: 1.5, whiteSpace: "pre-line", wordBreak: "break-word" }}>
             {task.description || "No description."}
           </p>
         </div>

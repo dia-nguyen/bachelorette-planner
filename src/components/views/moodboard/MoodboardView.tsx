@@ -241,6 +241,16 @@ export function MoodboardView() {
     [updateMoodboardNote, pushUndo],
   );
 
+  const handleDeleteNote = useCallback(
+    (id: string) => {
+      const ok = window.confirm("Delete this note?");
+      if (!ok) return;
+      pushUndo();
+      deleteMoodboardNote(id);
+    },
+    [deleteMoodboardNote, pushUndo],
+  );
+
   // ---- Zoom controls ----
   const zoomIn = useCallback(() => {
     setScale((s) => Math.min(MAX_SCALE, s + 0.2));
@@ -487,7 +497,7 @@ export function MoodboardView() {
               key={note.id}
               note={note}
               onUpdate={handleUpdateNote}
-              onDelete={(id) => { pushUndo(); deleteMoodboardNote(id); }}
+              onDelete={handleDeleteNote}
               onBringToFront={handleBringToFront}
               onUploadImage={uploadMoodboardImage}
               canvasScale={scale}
