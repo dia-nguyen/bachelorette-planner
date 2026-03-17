@@ -9,6 +9,106 @@ interface StubUserRow {
   custom_fields: Record<string, string> | null;
 }
 
+async function migrateScalarUserReference(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  table: string,
+  column: string,
+  stubId: string,
+  realUserId: string,
+): Promise<void> {
+  const { error } = await admin
+    .from(table)
+    .update({ [column]: realUserId })
+    .eq(column, stubId);
+
+  if (error) {
+    console.error(
+      `[auth/callback] Failed to migrate ${table}.${column} references:`,
+      error.message,
+    );
+  }
+}
+
+async function migrateArrayUserReference(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  table: string,
+  idColumn: string,
+  arrayColumn: string,
+  stubId: string,
+  realUserId: string,
+): Promise<void> {
+  const { data: rows, error } = await admin
+    .from(table)
+    .select(`${idColumn}, ${arrayColumn}`)
+    .contains(arrayColumn, [stubId]);
+
+  if (error) {
+    console.error(
+      `[auth/callback] Failed to load ${table}.${arrayColumn} references:`,
+      error.message,
+    );
+    return;
+  }
+
+  for (const row of (rows ?? []) as Array<Record<string, unknown>>) {
+    const rowId = row[idColumn];
+    const current = Array.isArray(row[arrayColumn]) ? (row[arrayColumn] as string[]) : [];
+    const next = current.map((userId) => (userId === stubId ? realUserId : userId));
+    const deduped = [...new Set(next)];
+
+    const { error: updateError } = await admin
+      .from(table)
+      .update({ [arrayColumn]: deduped })
+      .eq(idColumn, rowId);
+
+    if (updateError) {
+      console.error(
+        `[auth/callback] Failed to update ${table}.${arrayColumn} for row ${String(rowId)}:`,
+        updateError.message,
+      );
+    }
+  }
+}
+
+async function migrateStubReferences(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  stubId: string,
+  realUserId: string,
+): Promise<void> {
+  await Promise.all([
+    migrateArrayUserReference(admin, "tasks", "id", "assignee_user_ids", stubId, realUserId),
+    migrateArrayUserReference(admin, "events", "id", "attendee_user_ids", stubId, realUserId),
+    migrateArrayUserReference(
+      admin,
+      "budget_items",
+      "id",
+      "split_attendee_user_ids",
+      stubId,
+      realUserId,
+    ),
+    migrateScalarUserReference(
+      admin,
+      "budget_items",
+      "responsible_user_id",
+      stubId,
+      realUserId,
+    ),
+    migrateScalarUserReference(admin, "budget_items", "paid_by_user_id", stubId, realUserId),
+    migrateScalarUserReference(
+      admin,
+      "checklist_items",
+      "assignee_user_id",
+      stubId,
+      realUserId,
+    ),
+    migrateScalarUserReference(admin, "polls", "created_by_user_id", stubId, realUserId),
+    migrateScalarUserReference(admin, "photos", "uploaded_by_user_id", stubId, realUserId),
+  ]);
+}
+
 // Transfer memberships from a stub user to the real user, then delete the stub.
 // Handles the case where the real user already has a membership in the same trip
 // (e.g. from a previous partial merge) by deleting the conflicting stub membership
@@ -19,6 +119,8 @@ async function mergeStubIntoUser(
   stubId: string,
   realUserId: string,
 ): Promise<void> {
+  await migrateStubReferences(admin, stubId, realUserId);
+
   const { data: stubMemberships } = await admin
     .from("memberships")
     .select("id, trip_id")
