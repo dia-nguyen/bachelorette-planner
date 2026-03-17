@@ -28,6 +28,18 @@ body {
   margin: 0;
 }
 
+.app-shell-height {
+  min-height: 100vh;
+  height: 100vh;
+}
+
+@supports (height: 100svh) {
+  .app-shell-height {
+    min-height: 100svh;
+    height: 100svh;
+  }
+}
+
 .app-header-title {
   font-size: var(--font-xl);
 }

@@ -458,7 +458,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-screen" style={{ background: "var(--color-accent-soft)" }}>
+    <div className="flex app-shell-height" style={{ background: "var(--color-accent-soft)" }}>
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab}

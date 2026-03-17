@@ -55,7 +55,9 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: Sideba
         background: "var(--color-bg-surface)",
         borderRight: "1px solid var(--color-border)",
         position: "relative",
-        overflow: "visible",
+        overflowX: "visible",
+        overflowY: "auto",
+        paddingBottom: "max(12px, env(safe-area-inset-bottom))",
       }}
     >
       {/* Trip switcher button */}

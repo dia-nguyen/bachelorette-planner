@@ -11,9 +11,9 @@ interface KPICardsProps {
 
 export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {/* Days Until Trip */}
-      <Card>
+      <Card className="order-1 md:order-none">
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 4 }}>
           Days until trip
         </p>
@@ -23,7 +23,7 @@ export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
       </Card>
 
       {/* Task Status */}
-      <Card>
+      <Card className="order-3 md:order-none col-span-2 md:col-span-1">
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 4 }}>
           Task Status
         </p>
@@ -47,7 +47,7 @@ export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
       </Card>
 
       {/* Budget Remaining */}
-      <Card>
+      <Card className="order-4 md:order-none col-span-2 md:col-span-1">
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 4 }}>
           Budget remaining
         </p>
@@ -81,7 +81,7 @@ export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
       </Card>
 
       {/* Tasks Completed */}
-      <Card>
+      <Card className="order-2 md:order-none">
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 4 }}>
           Tasks completed
         </p>
