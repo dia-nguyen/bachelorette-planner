@@ -144,12 +144,18 @@ export function computeTasksSummary(tasks: Task[]): TasksSummary {
 // ---- Budget summary per person ----
 
 /** Get the attendee user IDs for a budget item (from linked event or explicit list) */
-function getItemAttendees(item: BudgetItem, events: TripEvent[]): string[] {
+function getItemAttendees(
+  item: BudgetItem,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): string[] {
+  const dedupe = (ids: string[] | undefined) =>
+    Array.from(new Set((ids ?? []).filter((id) => validUserIds.has(id))));
   if (item.relatedEventId) {
     const ev = events.find((e) => e.id === item.relatedEventId);
-    return ev?.attendeeUserIds ?? [];
+    return dedupe(ev?.attendeeUserIds);
   }
-  return item.splitAttendeeUserIds ?? [];
+  return dedupe(item.splitAttendeeUserIds);
 }
 
 /** Per-person planned amount for one budget item */
@@ -157,11 +163,12 @@ function ppPlanned(
   item: BudgetItem,
   userId: string,
   events: TripEvent[],
+  validUserIds: Set<string>,
 ): number {
   if (item.splitType === "custom" && item.plannedSplits?.[userId] != null) {
     return item.plannedSplits[userId];
   }
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   const count = attendees.length || 1;
   return item.plannedAmount / count;
 }
@@ -171,11 +178,12 @@ function ppActual(
   item: BudgetItem,
   userId: string,
   events: TripEvent[],
+  validUserIds: Set<string>,
 ): number {
   if (item.splitType === "custom" && item.actualSplits?.[userId] != null) {
     return item.actualSplits[userId];
   }
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   const count = attendees.length || 1;
   return item.actualAmount / count;
 }
@@ -185,10 +193,11 @@ function isInvolved(
   item: BudgetItem,
   userId: string,
   events: TripEvent[],
+  validUserIds: Set<string>,
 ): boolean {
   if (item.paidByUserId === userId) return true;
   if (item.responsibleUserId === userId) return true;
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   if (attendees.includes(userId)) return true;
   if (attendees.length === 0) return true;
   return false;
@@ -201,6 +210,7 @@ export function computePaymentsSummary(
   events: TripEvent[],
 ): PaymentSummary[] {
   const allUserIds = memberships.map((m) => m.userId);
+  const validUserIds = new Set(allUserIds);
 
   return allUserIds.map((uid) => {
     const user = users.find((u) => u.id === uid);
@@ -208,9 +218,9 @@ export function computePaymentsSummary(
     let actual = 0;
     let paid = 0;
     for (const item of budgetItems) {
-      if (!isInvolved(item, uid, events)) continue;
-      planned += ppPlanned(item, uid, events);
-      actual += ppActual(item, uid, events);
+      if (!isInvolved(item, uid, events, validUserIds)) continue;
+      planned += ppPlanned(item, uid, events, validUserIds);
+      actual += ppActual(item, uid, events, validUserIds);
       if (item.paidByUserId === uid) {
         paid += item.actualAmount;
       }

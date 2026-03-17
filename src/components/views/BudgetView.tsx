@@ -29,39 +29,60 @@ const headCellSt: CSSProperties = {
 };
 
 /** Get the attendee user IDs for a budget item (from linked event or explicit list) */
-function getItemAttendees(item: BudgetItem, events: TripEvent[]): string[] {
+function getItemAttendees(
+  item: BudgetItem,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): string[] {
+  const dedupe = (ids: string[] | undefined) =>
+    Array.from(new Set((ids ?? []).filter((id) => validUserIds.has(id))));
   if (item.relatedEventId) {
     const ev = events.find((e) => e.id === item.relatedEventId);
-    return ev?.attendeeUserIds ?? [];
+    return dedupe(ev?.attendeeUserIds);
   }
-  return item.splitAttendeeUserIds ?? [];
+  return dedupe(item.splitAttendeeUserIds);
 }
 
 /** Compute per-person planned cost for a single budget item */
-function perPersonPlanned(item: BudgetItem, userId: string, events: TripEvent[]): number {
+function perPersonPlanned(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): number {
   if (item.splitType === "custom" && item.plannedSplits?.[userId] != null) {
     return item.plannedSplits[userId];
   }
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   const count = attendees.length || 1;
   return item.plannedAmount / count;
 }
 
 /** Compute per-person actual cost for a single budget item */
-function perPersonActual(item: BudgetItem, userId: string, events: TripEvent[]): number {
+function perPersonActual(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): number {
   if (item.splitType === "custom" && item.actualSplits?.[userId] != null) {
     return item.actualSplits[userId];
   }
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   const count = attendees.length || 1;
   return item.actualAmount / count;
 }
 
 /** Check if a user is involved in this budget item */
-function isUserInvolved(item: BudgetItem, userId: string, events: TripEvent[]): boolean {
+function isUserInvolved(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): boolean {
   if (item.paidByUserId === userId) return true;
   if (item.responsibleUserId === userId) return true;
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   if (attendees.includes(userId)) return true;
   // If no attendees defined, item applies to everyone
   if (attendees.length === 0) return true;
@@ -71,12 +92,13 @@ function isUserInvolved(item: BudgetItem, userId: string, events: TripEvent[]): 
 export function BudgetView() {
   const { budgetItems, users, events, openPanel } = useApp();
   const [selectedUserId, setSelectedUserId] = useState<string | "all">("all");
+  const validUserIds = useMemo(() => new Set(users.map((user) => user.id)), [users]);
 
   // Filter items based on selected participant
   const filteredItems = useMemo(() => {
     if (selectedUserId === "all") return budgetItems;
-    return budgetItems.filter((item) => isUserInvolved(item, selectedUserId, events));
-  }, [budgetItems, events, selectedUserId]);
+    return budgetItems.filter((item) => isUserInvolved(item, selectedUserId, events, validUserIds));
+  }, [budgetItems, events, selectedUserId, validUserIds]);
 
   const totalPlanned = filteredItems.reduce((s, b) => s + b.plannedAmount, 0);
   const totalActual = filteredItems.reduce((s, b) => s + b.actualAmount, 0);
@@ -88,16 +110,16 @@ export function BudgetView() {
     let paid = 0;
     let plannedShare = 0;
     for (const item of filteredItems) {
-      plannedShare += perPersonPlanned(item, selectedUserId, events);
+      plannedShare += perPersonPlanned(item, selectedUserId, events, validUserIds);
       if (item.actualAmount > 0) {
-        owes += perPersonActual(item, selectedUserId, events);
+        owes += perPersonActual(item, selectedUserId, events, validUserIds);
       }
       if (item.paidByUserId === selectedUserId) {
         paid += item.actualAmount;
       }
     }
     return { plannedShare, owes, paid, net: paid - owes };
-  }, [filteredItems, events, selectedUserId]);
+  }, [filteredItems, events, selectedUserId, validUserIds]);
 
   const selectedUser = users.find((u) => u.id === selectedUserId);
 
@@ -188,7 +210,11 @@ export function BudgetView() {
               {filteredItems.map((item) => {
                 const payer = users.find((u) => u.id === item.paidByUserId);
                 const yourShare = selectedUserId !== "all"
-                  ? (item.actualAmount > 0 ? perPersonActual(item, selectedUserId, events) : perPersonPlanned(item, selectedUserId, events))
+                  ? (
+                    item.actualAmount > 0
+                      ? perPersonActual(item, selectedUserId, events, validUserIds)
+                      : perPersonPlanned(item, selectedUserId, events, validUserIds)
+                  )
                   : 0;
 
                 return (

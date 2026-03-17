@@ -218,6 +218,17 @@ interface AppContextValue {
 
 const LAST_TRIP_KEY = "bp-last-trip-id";
 
+function uniqueIds(ids: string[] | null | undefined, validIds?: Iterable<string>): string[] {
+  const allowed = validIds ? new Set(validIds) : null;
+  return Array.from(
+    new Set(
+      (ids ?? []).filter((id): id is string =>
+        Boolean(id) && (!allowed || allowed.has(id)),
+      ),
+    ),
+  );
+}
+
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode; }) {
@@ -408,6 +419,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
         setSupabaseUsers(mappedUsers);
 
+        const tripMemberIds = new Set(mappedMemberships.map((member) => member.userId));
+
         setSupabaseEvents(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (data.events ?? []).map((e: any) => ({
@@ -421,7 +434,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             status: e.status,
             provider: e.provider ?? undefined,
             confirmationCode: e.confirmation_code ?? undefined,
-            attendeeUserIds: (e.attendee_user_ids ?? []) as string[],
+            attendeeUserIds: uniqueIds((e.attendee_user_ids ?? []) as string[], tripMemberIds),
           })),
         );
 
@@ -877,37 +890,48 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
   const addEvent = useCallback(
     (data: Omit<TripEvent, "id" | "tripId">) => {
+      const validUserIds = memberships.map((member) => member.userId);
+      const normalizedData: Omit<TripEvent, "id" | "tripId"> = {
+        ...data,
+        attendeeUserIds: uniqueIds(data.attendeeUserIds, validUserIds),
+      };
+
       if (isSupabaseMode && activeTripId) {
         const id = uuid();
-        const newEvent: TripEvent = { ...data, id, tripId: activeTripId };
+        const newEvent: TripEvent = { ...normalizedData, id, tripId: activeTripId };
         setSupabaseEvents((prev) => [...prev, newEvent]);
         void fetch(`/api/trips/${activeTripId}/events`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...data, id }),
+          body: JSON.stringify({ ...normalizedData, id }),
         });
         return;
       }
-      repo.addEvent({ ...data, id: uuid(), tripId });
+      repo.addEvent({ ...normalizedData, id: uuid(), tripId });
     },
-    [tripId, isSupabaseMode, activeTripId]
+    [tripId, isSupabaseMode, activeTripId, memberships]
   );
   const updateEvent = useCallback(
     (id: string, patch: Partial<TripEvent>) => {
+      const validUserIds = memberships.map((member) => member.userId);
+      const normalizedPatch = patch.attendeeUserIds
+        ? { ...patch, attendeeUserIds: uniqueIds(patch.attendeeUserIds, validUserIds) }
+        : patch;
+
       if (isSupabaseMode && activeTripId) {
         setSupabaseEvents((prev) =>
-          prev.map((e) => e.id === id ? { ...e, ...patch } : e)
+          prev.map((e) => e.id === id ? { ...e, ...normalizedPatch } : e)
         );
         void fetch(`/api/trips/${activeTripId}/events`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, patch }),
+          body: JSON.stringify({ id, patch: normalizedPatch }),
         });
         return;
       }
-      repo.updateEvent(id, patch);
+      repo.updateEvent(id, normalizedPatch);
     },
-    [isSupabaseMode, activeTripId]
+    [isSupabaseMode, activeTripId, memberships]
   );
   const deleteEvent = useCallback(
     (id: string) => {
@@ -1336,7 +1360,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
               status: input.eventStatus || "DRAFT",
               provider: input.eventProvider || "",
               confirmationCode: input.eventConfirmationCode || "",
-              attendeeUserIds: input.eventAttendeeUserIds || [],
+              attendeeUserIds: uniqueIds(input.eventAttendeeUserIds),
             }),
           });
           if (!eventRes.ok) {
@@ -1425,7 +1449,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
           status: input.eventStatus || "DRAFT",
           provider: input.eventProvider || undefined,
           confirmationCode: input.eventConfirmationCode || undefined,
-          attendeeUserIds: input.eventAttendeeUserIds || [],
+          attendeeUserIds: uniqueIds(input.eventAttendeeUserIds),
         });
       }
 

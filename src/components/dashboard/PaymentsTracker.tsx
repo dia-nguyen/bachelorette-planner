@@ -41,7 +41,7 @@ export function PaymentsTracker({ payments }: PaymentsTrackerProps) {
             <span>Person</span>
             <span style={{ textAlign: "right", minWidth: 68 }}>Planned</span>
             <span style={{ textAlign: "right", minWidth: 68 }}>Actual</span>
-            <span style={{ textAlign: "right", minWidth: 68 }}>Paid</span>
+            <span style={{ textAlign: "right", minWidth: 68 }}>Paid Out</span>
           </div>
 
           {payments.map((p) => {
@@ -87,7 +87,7 @@ export function PaymentsTracker({ payments }: PaymentsTrackerProps) {
                   {formatCurrency(p.actual)}
                 </span>
 
-                {/* Paid */}
+                {/* Paid out by this person */}
                 <span
                   style={{
                     textAlign: "right",

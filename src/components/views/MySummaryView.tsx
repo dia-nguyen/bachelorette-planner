@@ -7,28 +7,45 @@ import type { BudgetItem, TripEvent } from "@/lib/data";
 import { formatCurrency } from "@/lib/domain";
 import { useMemo } from "react";
 
-function getItemAttendees(item: BudgetItem, events: TripEvent[]): string[] {
+function getItemAttendees(
+  item: BudgetItem,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): string[] {
+  const dedupe = (ids: string[] | undefined) =>
+    Array.from(new Set((ids ?? []).filter((id) => validUserIds.has(id))));
   if (item.relatedEventId) {
     const ev = events.find((e) => e.id === item.relatedEventId);
-    return ev?.attendeeUserIds ?? [];
+    return dedupe(ev?.attendeeUserIds);
   }
-  return item.splitAttendeeUserIds ?? [];
+  return dedupe(item.splitAttendeeUserIds);
 }
 
-function perPersonCost(item: BudgetItem, userId: string, events: TripEvent[], field: "planned" | "actual"): number {
+function perPersonCost(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+  field: "planned" | "actual",
+): number {
   const splits = field === "planned" ? item.plannedSplits : item.actualSplits;
   if (item.splitType === "custom" && splits?.[userId] != null) {
     return splits[userId];
   }
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   const count = attendees.length || 1;
   const amount = field === "planned" ? item.plannedAmount : item.actualAmount;
   return amount / count;
 }
 
-function isUserInvolved(item: BudgetItem, userId: string, events: TripEvent[]): boolean {
+function isUserInvolved(
+  item: BudgetItem,
+  userId: string,
+  events: TripEvent[],
+  validUserIds: Set<string>,
+): boolean {
   if (item.paidByUserId === userId || item.responsibleUserId === userId) return true;
-  const attendees = getItemAttendees(item, events);
+  const attendees = getItemAttendees(item, events, validUserIds);
   if (attendees.includes(userId)) return true;
   if (attendees.length === 0) return true;
   return false;
@@ -44,6 +61,7 @@ export function MySummaryView() {
   const { currentUserId, users, memberships, events, tasks, budgetItems, openPanel } = useApp();
   const me = users.find((u) => u.id === currentUserId);
   const myMembership = memberships.find((m) => m.userId === currentUserId);
+  const validUserIds = useMemo(() => new Set(users.map((user) => user.id)), [users]);
 
   // My events (where I'm an attendee)
   const myEvents = useMemo(
@@ -68,21 +86,23 @@ export function MySummaryView() {
 
   // My cost summary
   const costSummary = useMemo(() => {
-    const relevant = budgetItems.filter((item) => isUserInvolved(item, currentUserId, events));
+    const relevant = budgetItems.filter((item) =>
+      isUserInvolved(item, currentUserId, events, validUserIds),
+    );
     let plannedShare = 0;
     let owes = 0;
     let paid = 0;
     for (const item of relevant) {
-      plannedShare += perPersonCost(item, currentUserId, events, "planned");
+      plannedShare += perPersonCost(item, currentUserId, events, validUserIds, "planned");
       if (item.actualAmount > 0) {
-        owes += perPersonCost(item, currentUserId, events, "actual");
+        owes += perPersonCost(item, currentUserId, events, validUserIds, "actual");
       }
       if (item.paidByUserId === currentUserId) {
         paid += item.actualAmount;
       }
     }
     return { plannedShare, owes, paid, net: paid - owes, itemCount: relevant.length };
-  }, [budgetItems, events, currentUserId]);
+  }, [budgetItems, events, currentUserId, validUserIds]);
 
   const todoCount = myTasks.filter((t) => t.status === "TODO").length;
   const inProgressCount = myTasks.filter((t) => t.status === "IN_PROGRESS").length;
