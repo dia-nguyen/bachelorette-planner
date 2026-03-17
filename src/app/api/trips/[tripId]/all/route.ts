@@ -117,40 +117,109 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  let body: { guestFieldSchema?: unknown };
+  let body: {
+    guestFieldSchema?: unknown;
+    name?: unknown;
+    description?: unknown;
+    location?: unknown;
+    startAt?: unknown;
+    endAt?: unknown;
+  };
   try {
-    body = (await request.json()) as { guestFieldSchema?: unknown };
+    body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  if (!Array.isArray(body.guestFieldSchema)) {
-    return NextResponse.json({ error: "guestFieldSchema must be an array." }, { status: 400 });
+  const hasGuestFieldSchema = "guestFieldSchema" in body;
+  const hasTripFields =
+    "name" in body ||
+    "description" in body ||
+    "location" in body ||
+    "startAt" in body ||
+    "endAt" in body;
+
+  if (!hasGuestFieldSchema && !hasTripFields) {
+    return NextResponse.json(
+      { error: "No supported fields were provided." },
+      { status: 400 },
+    );
   }
 
-  const allowedTypes = new Set(["text", "tel", "number", "date", "textarea"]);
-  const normalizedSchema: Array<{ id: string; label: string; type: string }> = [];
-  for (const field of body.guestFieldSchema) {
-    if (!field || typeof field !== "object") {
-      return NextResponse.json({ error: "Each guest field must be an object." }, { status: 400 });
+  const updatePatch: {
+    guest_field_schema?: Array<{ id: string; label: string; type: string }>;
+    name?: string;
+    description?: string | null;
+    location?: string;
+    start_at?: string;
+    end_at?: string;
+  } = {};
+
+  if (hasGuestFieldSchema) {
+    if (!Array.isArray(body.guestFieldSchema)) {
+      return NextResponse.json({ error: "guestFieldSchema must be an array." }, { status: 400 });
     }
-    const typed = field as Record<string, unknown>;
-    const id = String(typed.id ?? "").trim();
-    const label = String(typed.label ?? "").trim();
-    const type = String(typed.type ?? "").trim();
-    if (!id || !label || !allowedTypes.has(type)) {
-      return NextResponse.json(
-        { error: "Each guest field must include valid id, label, and type." },
-        { status: 400 },
-      );
+
+    const allowedTypes = new Set(["text", "tel", "number", "date", "textarea"]);
+    const normalizedSchema: Array<{ id: string; label: string; type: string }> = [];
+    for (const field of body.guestFieldSchema) {
+      if (!field || typeof field !== "object") {
+        return NextResponse.json({ error: "Each guest field must be an object." }, { status: 400 });
+      }
+      const typed = field as Record<string, unknown>;
+      const id = String(typed.id ?? "").trim();
+      const label = String(typed.label ?? "").trim();
+      const type = String(typed.type ?? "").trim();
+      if (!id || !label || !allowedTypes.has(type)) {
+        return NextResponse.json(
+          { error: "Each guest field must include valid id, label, and type." },
+          { status: 400 },
+        );
+      }
+      normalizedSchema.push({ id, label, type });
     }
-    normalizedSchema.push({ id, label, type });
+    updatePatch.guest_field_schema = normalizedSchema;
+  }
+
+  if ("name" in body) {
+    if (typeof body.name !== "string" || !body.name.trim()) {
+      return NextResponse.json({ error: "name must be a non-empty string." }, { status: 400 });
+    }
+    updatePatch.name = body.name.trim();
+  }
+
+  if ("description" in body) {
+    if (typeof body.description !== "string") {
+      return NextResponse.json({ error: "description must be a string." }, { status: 400 });
+    }
+    updatePatch.description = body.description.trim() || null;
+  }
+
+  if ("location" in body) {
+    if (typeof body.location !== "string") {
+      return NextResponse.json({ error: "location must be a string." }, { status: 400 });
+    }
+    updatePatch.location = body.location.trim();
+  }
+
+  if ("startAt" in body) {
+    if (typeof body.startAt !== "string" || !body.startAt.trim()) {
+      return NextResponse.json({ error: "startAt must be a non-empty string." }, { status: 400 });
+    }
+    updatePatch.start_at = body.startAt;
+  }
+
+  if ("endAt" in body) {
+    if (typeof body.endAt !== "string" || !body.endAt.trim()) {
+      return NextResponse.json({ error: "endAt must be a non-empty string." }, { status: 400 });
+    }
+    updatePatch.end_at = body.endAt;
   }
 
   const admin = createAdminClient();
   const { data: tripRow, error: updateError } = await admin
     .from("trips")
-    .update({ guest_field_schema: normalizedSchema })
+    .update(updatePatch)
     .eq("id", tripId)
     .select("*")
     .maybeSingle();

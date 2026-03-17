@@ -69,10 +69,8 @@ export function SettingsView() {
       {/* Countdown banner */}
       {daysUntil !== null && (
         <div
+          className="flex flex-col sm:flex-row sm:items-center gap-3"
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
             padding: "14px 18px",
             borderRadius: "var(--radius-md)",
             background: "var(--color-accent-soft)",
@@ -80,29 +78,39 @@ export function SettingsView() {
             marginBottom: 28,
           }}
         >
-          <HiOutlineCalendar size={22} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
-          <div>
+          <div className="flex items-center gap-3">
+            <HiOutlineCalendar size={22} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
+            <div>
             {daysUntil > 0 ? (
               <>
-                <span
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 700,
-                    color: "var(--color-accent)",
-                    lineHeight: 1,
-                  }}
-                >
-                  {daysUntil}
-                </span>
-                <span
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span
+                    style={{
+                      fontSize: 28,
+                      fontWeight: 700,
+                      color: "var(--color-accent)",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {daysUntil}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "var(--font-md)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {daysUntil === 1 ? "day" : "days"}
+                  </span>
+                </div>
+                <div
                   style={{
                     fontSize: "var(--font-md)",
                     color: "var(--color-text-secondary)",
-                    marginLeft: 8,
                   }}
                 >
-                  {daysUntil === 1 ? "day" : "days"} until the trip
-                </span>
+                  until the trip
+                </div>
               </>
             ) : daysUntil === 0 ? (
               <span style={{ fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--color-accent)" }}>
@@ -113,11 +121,12 @@ export function SettingsView() {
                 The trip was {Math.abs(daysUntil)} {Math.abs(daysUntil) === 1 ? "day" : "days"} ago
               </span>
             )}
+            </div>
           </div>
           {location && (
             <div
+              className="sm:ml-auto"
               style={{
-                marginLeft: "auto",
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
@@ -184,7 +193,7 @@ export function SettingsView() {
         </div>
 
         {/* Dates */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label style={labelStyle}>Start Date</label>
             <input

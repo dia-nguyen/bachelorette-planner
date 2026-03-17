@@ -812,8 +812,48 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   );
 
   const updateTrip = useCallback(
-    (patch: Partial<Trip>) => repo.updateTrip(tripId, patch),
-    [tripId]
+    (patch: Partial<Trip>) => {
+      if (isSupabaseMode && activeTripId) {
+        const previousTrip = supabaseTrip;
+
+        if (previousTrip) {
+          setSupabaseTrip({ ...previousTrip, ...patch });
+        }
+
+        const payload: Record<string, unknown> = {};
+        if ("name" in patch) payload.name = patch.name;
+        if ("description" in patch) payload.description = patch.description ?? "";
+        if ("location" in patch) payload.location = patch.location ?? "";
+        if ("startAt" in patch) payload.startAt = patch.startAt;
+        if ("endAt" in patch) payload.endAt = patch.endAt;
+
+        void fetch(`/api/trips/${activeTripId}/all`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).then(async (res) => {
+          const result = (await res.json()) as {
+            error?: string;
+            trip?: Record<string, unknown>;
+          };
+          if (!res.ok) {
+            throw new Error(result.error ?? "Failed to save trip settings.");
+          }
+          if (result.trip) {
+            setSupabaseTrip(mapTripRow(result.trip));
+            return;
+          }
+          refresh();
+        }).catch((error) => {
+          console.error("[AppContext] Failed to update trip:", error);
+          setSupabaseTrip(previousTrip);
+        });
+        return;
+      }
+
+      repo.updateTrip(tripId, patch);
+    },
+    [activeTripId, isSupabaseMode, refresh, supabaseTrip, tripId]
   );
 
   const updateUser = useCallback(

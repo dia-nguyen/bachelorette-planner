@@ -10,16 +10,12 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { StickyNote } from "./StickyNote";
 
 const CANVAS_SIZE = 5000; // virtual canvas size
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 2;
-const ZOOM_SENSITIVITY = 0.0009;
-const MIN_ZOOM_STEP = 0.02;
-const MAX_ZOOM_STEP = 0.08;
 const DEFAULT_PASTED_NOTE_WIDTH = 320;
 const DEFAULT_PASTED_NOTE_HEIGHT = 280;
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 768px)";
@@ -52,7 +48,27 @@ export function MoodboardView() {
   const [isPastingImage, setIsPastingImage] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+  const scaleRef = useRef(1);
+  const offsetRef = useRef({ x: -CANVAS_SIZE / 2 + 400, y: -CANVAS_SIZE / 2 + 300 });
+  const wheelDeltaRef = useRef(0);
+  const wheelAnchorRef = useRef({ x: 0, y: 0 });
+  const wheelRafRef = useRef<number | null>(null);
+  const activePointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchStart = useRef<{
+    distance: number;
+    scale: number;
+    anchorCanvasX: number;
+    anchorCanvasY: number;
+  } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
 
   // ---- Undo / Redo history ----
   const undoStack = useRef<MoodboardNote[][]>([]);
@@ -107,6 +123,29 @@ export function MoodboardView() {
   }, []);
 
   useEffect(() => {
+    if (!isMobileReadOnly) return;
+
+    const bodyStyle = document.body.style;
+    const htmlStyle = document.documentElement.style;
+    const prevBodyOverflow = bodyStyle.overflow;
+    const prevHtmlOverflow = htmlStyle.overflow;
+    const prevBodyOverscroll = bodyStyle.overscrollBehavior;
+    const prevHtmlOverscroll = htmlStyle.overscrollBehavior;
+
+    bodyStyle.overflow = "hidden";
+    htmlStyle.overflow = "hidden";
+    bodyStyle.overscrollBehavior = "none";
+    htmlStyle.overscrollBehavior = "none";
+
+    return () => {
+      bodyStyle.overflow = prevBodyOverflow;
+      htmlStyle.overflow = prevHtmlOverflow;
+      bodyStyle.overscrollBehavior = prevBodyOverscroll;
+      htmlStyle.overscrollBehavior = prevHtmlOverscroll;
+    };
+  }, [isMobileReadOnly]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isMobileReadOnly) return;
       const mod = e.metaKey || e.ctrlKey;
@@ -131,9 +170,40 @@ export function MoodboardView() {
       const target = e.target as HTMLElement;
       const clickedNote = target.closest("[data-sticky-note='true']");
       if (clickedNote && !isMobileReadOnly) return;
-      if (e.button !== 0 && e.button !== 1) return;
+
+      const isTouchPointer = e.pointerType === "touch";
+      if (!isTouchPointer && e.button !== 0 && e.button !== 1) return;
+
       e.preventDefault();
       viewportRef.current?.focus();
+
+      const host = e.currentTarget as HTMLElement;
+      host.setPointerCapture(e.pointerId);
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (isTouchPointer && activePointers.current.size >= 2) {
+        const [a, b] = Array.from(activePointers.current.values());
+        const rect = viewportRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= 0) return;
+
+        const midX = (a.x + b.x) / 2 - rect.left;
+        const midY = (a.y + b.y) / 2 - rect.top;
+
+        pinchStart.current = {
+          distance,
+          scale,
+          anchorCanvasX: (midX - offset.x) / scale,
+          anchorCanvasY: (midY - offset.y) / scale,
+        };
+        setIsPanning(false);
+        return;
+      }
+
       setIsPanning(true);
       panStart.current = {
         x: e.clientX,
@@ -141,13 +211,42 @@ export function MoodboardView() {
         ox: offset.x,
         oy: offset.y,
       };
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [isMobileReadOnly, offset],
+    [isMobileReadOnly, offset.x, offset.y, scale],
   );
 
   const handlePanMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      const isTouchPointer = e.pointerType === "touch";
+      if (isTouchPointer && activePointers.current.has(e.pointerId)) {
+        activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      if (isTouchPointer && pinchStart.current && activePointers.current.size >= 2) {
+        const [a, b] = Array.from(activePointers.current.values());
+        const rect = viewportRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= 0) return;
+
+        const pinch = pinchStart.current;
+        const midX = (a.x + b.x) / 2 - rect.left;
+        const midY = (a.y + b.y) / 2 - rect.top;
+        const scaled = pinch.scale * (distance / pinch.distance);
+        const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scaled));
+
+        e.preventDefault();
+        setScale(nextScale);
+        setOffset({
+          x: midX - pinch.anchorCanvasX * nextScale,
+          y: midY - pinch.anchorCanvasY * nextScale,
+        });
+        return;
+      }
+
       if (!isPanning) return;
       e.preventDefault();
       const dx = e.clientX - panStart.current.x;
@@ -160,42 +259,71 @@ export function MoodboardView() {
     [isPanning],
   );
 
-  const handlePanEnd = useCallback(() => {
+  const handlePanEnd = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    activePointers.current.delete(e.pointerId);
+    pinchStart.current = activePointers.current.size >= 2 ? pinchStart.current : null;
+    if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    }
     setIsPanning(false);
   }, []);
 
-  // ---- Zoom (scroll wheel) ----
-  const handleWheel = useCallback(
-    (e: ReactWheelEvent<HTMLDivElement>) => {
-      const target = e.target as HTMLElement;
-      if (target.closest("[data-sticky-note='true']")) {
-        return;
-      }
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
 
-      e.preventDefault();
-      const rect = viewportRef.current?.getBoundingClientRect();
-      if (!rect) return;
+    const flushWheelZoom = () => {
+      wheelRafRef.current = null;
+      const rect = viewport.getBoundingClientRect();
+      const deltaY = wheelDeltaRef.current;
+      wheelDeltaRef.current = 0;
+      if (deltaY === 0) return;
 
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+      const currentScale = scaleRef.current;
+      const currentOffset = offsetRef.current;
+      const zoomFactor = Math.exp(-deltaY * 0.0015);
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, currentScale * zoomFactor));
+      if (newScale === currentScale) return;
 
-      const step = Math.min(
-        MAX_ZOOM_STEP,
-        Math.max(MIN_ZOOM_STEP, Math.abs(e.deltaY) * ZOOM_SENSITIVITY),
-      );
-      const delta = e.deltaY > 0 ? -step : step;
-      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta));
+      const factor = newScale / currentScale;
+      const mouseX = wheelAnchorRef.current.x - rect.left;
+      const mouseY = wheelAnchorRef.current.y - rect.top;
+      const nextOffset = {
+        x: mouseX - factor * (mouseX - currentOffset.x),
+        y: mouseY - factor * (mouseY - currentOffset.y),
+      };
 
-      // Zoom toward cursor
-      const factor = newScale / scale;
-      setOffset((prev) => ({
-        x: mouseX - factor * (mouseX - prev.x),
-        y: mouseY - factor * (mouseY - prev.y),
-      }));
+      scaleRef.current = newScale;
+      offsetRef.current = nextOffset;
+      setOffset(nextOffset);
       setScale(newScale);
-    },
-    [scale],
-  );
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const deltaY =
+        e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? e.deltaY * 16
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? e.deltaY * viewport.clientHeight
+            : e.deltaY;
+      wheelDeltaRef.current += deltaY;
+      wheelAnchorRef.current = { x: e.clientX, y: e.clientY };
+      if (wheelRafRef.current == null) {
+        wheelRafRef.current = window.requestAnimationFrame(flushWheelZoom);
+      }
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+      if (wheelRafRef.current != null) {
+        window.cancelAnimationFrame(wheelRafRef.current);
+        wheelRafRef.current = null;
+      }
+      wheelDeltaRef.current = 0;
+    };
+  }, []);
 
   const getViewportCenterCanvasPoint = useCallback(() => {
     const rect = viewportRef.current?.getBoundingClientRect();
@@ -625,13 +753,15 @@ export function MoodboardView() {
         onPointerDown={handlePanStart}
         onPointerMove={handlePanMove}
         onPointerUp={handlePanEnd}
-        onWheel={handleWheel}
+        onPointerCancel={handlePanEnd}
         style={{
           width: "100%",
           height: "100%",
           cursor: isPanning ? "grabbing" : "grab",
           overflow: "hidden",
           outline: "none",
+          touchAction: isMobileReadOnly ? "none" : "auto",
+          overscrollBehavior: isMobileReadOnly ? "none" : "auto",
         }}
       >
         {/* Transformed canvas layer */}
