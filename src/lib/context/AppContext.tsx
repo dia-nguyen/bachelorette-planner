@@ -155,7 +155,7 @@ interface AppContextValue {
   createTaskForBudgetItem: (budgetItemId: string) => void;
 
   // Unified "Plan Activity" — creates any combo of event/task/budget, all pre-linked
-  planActivity: (input: PlanActivityInput) => void;
+  planActivity: (input: PlanActivityInput) => Promise<void>;
 
   // Multi-trip
   availableTrips: Trip[];
@@ -1204,12 +1204,112 @@ export function AppProvider({ children }: { children: ReactNode; }) {
 
   // ---- Unified Plan Activity ----
   const planActivity = useCallback(
-    (input: PlanActivityInput) => {
+    async (input: PlanActivityInput) => {
       const eventId = input.createEvent ? uuid() : null;
       const taskId = input.createTask ? uuid() : null;
       const budgetId = input.createBudget ? uuid() : null;
 
-      // 1) Event (now includes reservation/booking fields)
+      if (isSupabaseMode && activeTripId) {
+        const parseError = async (res: Response, fallback: string) => {
+          try {
+            const payload = (await res.json()) as { error?: string };
+            return payload.error ?? fallback;
+          } catch {
+            return fallback;
+          }
+        };
+
+        if (input.createEvent && eventId) {
+          const eventRes = await fetch(`/api/trips/${activeTripId}/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: eventId,
+              title: input.eventTitleOverride || input.title,
+              description: input.description,
+              location: input.eventLocation || "",
+              startAt: input.eventStartAt || new Date().toISOString(),
+              endAt: input.eventEndAt || new Date().toISOString(),
+              status: input.eventStatus || "DRAFT",
+              provider: input.eventProvider || "",
+              confirmationCode: input.eventConfirmationCode || "",
+              attendeeUserIds: input.eventAttendeeUserIds || [],
+            }),
+          });
+          if (!eventRes.ok) {
+            throw new Error(await parseError(eventRes, "Failed to create event."));
+          }
+        }
+
+        if (input.createTask && taskId) {
+          const taskRes = await fetch(`/api/trips/${activeTripId}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: taskId,
+              title:
+                input.taskTitleOverride ||
+                (input.createEvent ? `Book: ${input.title}` : input.title),
+              description: input.description,
+              status: input.taskStatus || "TODO",
+              priority: input.taskPriority || "MEDIUM",
+              dueAt: input.taskDueAt || null,
+              assigneeUserIds: input.taskAssigneeIds || [],
+              relatedEventId: eventId,
+              relatedBudgetItemId: null,
+            }),
+          });
+          if (!taskRes.ok) {
+            throw new Error(await parseError(taskRes, "Failed to create task."));
+          }
+        }
+
+        if (input.createBudget && budgetId) {
+          const budgetRes = await fetch(`/api/trips/${activeTripId}/budget`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: budgetId,
+              title: input.budgetTitleOverride || input.title,
+              category: input.budgetCategory || "MISC",
+              plannedAmount: input.budgetPlannedAmount || 0,
+              actualAmount: input.budgetActualAmount || 0,
+              currency: "USD",
+              responsibleUserId: input.budgetResponsibleId || null,
+              paidByUserId: input.budgetPaidById || null,
+              status: input.budgetStatus || "PLANNED",
+              relatedEventId: eventId,
+              relatedTaskId: taskId,
+              notes: input.budgetNotes?.trim() || "",
+              costMode: input.budgetCostMode || "total",
+              splitType: input.budgetSplitType || "even",
+              splitAttendeeUserIds: input.eventAttendeeUserIds || [],
+            }),
+          });
+          if (!budgetRes.ok) {
+            throw new Error(await parseError(budgetRes, "Failed to create budget item."));
+          }
+        }
+
+        if (input.createTask && input.createBudget && taskId && budgetId) {
+          const linkRes = await fetch(`/api/trips/${activeTripId}/tasks`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: taskId,
+              patch: { relatedBudgetItemId: budgetId },
+            }),
+          });
+          if (!linkRes.ok) {
+            throw new Error(await parseError(linkRes, "Failed to link task and budget item."));
+          }
+        }
+
+        refresh();
+        return;
+      }
+
+      // Demo mode fallback
       if (input.createEvent && eventId) {
         repo.addEvent({
           id: eventId,
@@ -1226,7 +1326,23 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         });
       }
 
-      // 2) Budget
+      if (input.createTask && taskId) {
+        repo.addTask({
+          id: taskId,
+          tripId,
+          title:
+            input.taskTitleOverride ||
+            (input.createEvent ? `Book: ${input.title}` : input.title),
+          description: input.description,
+          status: input.taskStatus || "TODO",
+          priority: input.taskPriority || "MEDIUM",
+          dueAt: input.taskDueAt || null,
+          assigneeUserIds: input.taskAssigneeIds || [],
+          relatedEventId: eventId,
+          relatedBudgetItemId: budgetId,
+        });
+      }
+
       if (input.createBudget && budgetId) {
         repo.addBudgetItem({
           id: budgetId,
@@ -1244,24 +1360,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
           notes: input.budgetNotes?.trim() || "",
         });
       }
-
-      // 3) Task
-      if (input.createTask && taskId) {
-        repo.addTask({
-          id: taskId,
-          tripId,
-          title: input.taskTitleOverride || (input.createEvent ? `Book: ${input.title}` : input.title),
-          description: input.description,
-          status: input.taskStatus || "TODO",
-          priority: input.taskPriority || "MEDIUM",
-          dueAt: input.taskDueAt || null,
-          assigneeUserIds: input.taskAssigneeIds || [],
-          relatedEventId: eventId,
-          relatedBudgetItemId: budgetId,
-        });
-      }
     },
-    [tripId]
+    [activeTripId, isSupabaseMode, refresh, tripId]
   );
 
   const value: AppContextValue = {

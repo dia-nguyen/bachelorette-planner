@@ -29,7 +29,14 @@ function toDbPatch(patch: Record<string, unknown>): Record<string, unknown> {
   for (const [key, value] of Object.entries(patch)) {
     const dbKey = FIELD_MAP[key];
     if (!dbKey) continue;
-    if (key === "costMode" && typeof value === "string") {
+    if (key === "status" && typeof value === "string") {
+      result[dbKey] =
+        value === "PURCHASED" || value === "REIMBURSED" || value === "SETTLED"
+          ? "PAID"
+          : value === "CANCELED"
+            ? "CANCELLED"
+            : value;
+    } else if (key === "costMode" && typeof value === "string") {
       result[dbKey] =
         value === "per_person"
           ? "PER_PERSON"

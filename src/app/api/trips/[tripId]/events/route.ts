@@ -21,7 +21,12 @@ function toDbPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
     const dbKey = FIELD_MAP[key];
-    if (dbKey) result[dbKey] = value;
+    if (!dbKey) continue;
+    if (key === "status" && typeof value === "string") {
+      result[dbKey] = value === "CANCELED" ? "CANCELLED" : value;
+      continue;
+    }
+    result[dbKey] = value;
   }
   return result;
 }
