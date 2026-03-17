@@ -68,8 +68,14 @@ export function StickyNote({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState(note.title);
+  const [draftText, setDraftText] = useState(note.text);
   const dragOffset = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const titleSaveTimeoutRef = useRef<number | null>(null);
+  const textSaveTimeoutRef = useRef<number | null>(null);
+  const latestDraftTitleRef = useRef(note.title);
+  const latestDraftTextRef = useRef(note.text);
 
   const stageWidth = useMemo(() => getNoteImageStageWidth(note.width), [note.width]);
   const normalizedImages = useMemo(
@@ -96,6 +102,85 @@ export function StickyNote({
       setSelectedImageId(null);
     }
   }, [normalizedImages, selectedImageId]);
+
+  useEffect(() => {
+    setDraftTitle(note.title);
+  }, [note.id, note.title]);
+
+  useEffect(() => {
+    setDraftText(note.text);
+  }, [note.id, note.text]);
+
+  useEffect(() => {
+    latestDraftTitleRef.current = draftTitle;
+  }, [draftTitle]);
+
+  useEffect(() => {
+    latestDraftTextRef.current = draftText;
+  }, [draftText]);
+
+  const flushTitleSave = useCallback(
+    (value: string) => {
+      if (titleSaveTimeoutRef.current) {
+        window.clearTimeout(titleSaveTimeoutRef.current);
+        titleSaveTimeoutRef.current = null;
+      }
+
+      if (value !== note.title) {
+        onUpdate(note.id, { title: value });
+      }
+    },
+    [note.id, note.title, onUpdate],
+  );
+
+  const flushTextSave = useCallback(
+    (value: string) => {
+      if (textSaveTimeoutRef.current) {
+        window.clearTimeout(textSaveTimeoutRef.current);
+        textSaveTimeoutRef.current = null;
+      }
+
+      if (value !== note.text) {
+        onUpdate(note.id, { text: value });
+      }
+    },
+    [note.id, note.text, onUpdate],
+  );
+
+  useEffect(() => {
+    if (draftTitle === note.title) return;
+
+    titleSaveTimeoutRef.current = window.setTimeout(() => {
+      flushTitleSave(draftTitle);
+    }, 250);
+
+    return () => {
+      if (titleSaveTimeoutRef.current) {
+        window.clearTimeout(titleSaveTimeoutRef.current);
+        titleSaveTimeoutRef.current = null;
+      }
+    };
+  }, [draftTitle, flushTitleSave, note.title]);
+
+  useEffect(() => {
+    if (draftText === note.text) return;
+
+    textSaveTimeoutRef.current = window.setTimeout(() => {
+      flushTextSave(draftText);
+    }, 250);
+
+    return () => {
+      if (textSaveTimeoutRef.current) {
+        window.clearTimeout(textSaveTimeoutRef.current);
+        textSaveTimeoutRef.current = null;
+      }
+    };
+  }, [draftText, flushTextSave, note.text]);
+
+  useEffect(() => () => {
+    flushTitleSave(latestDraftTitleRef.current);
+    flushTextSave(latestDraftTextRef.current);
+  }, [flushTextSave, flushTitleSave]);
 
   useEffect(() => {
     if (!selectedImageId) return;
@@ -296,7 +381,7 @@ export function StickyNote({
     if (!ta) return;
     ta.style.height = "auto";
     ta.style.height = ta.scrollHeight + "px";
-  }, [note.text]);
+  }, [draftText]);
 
   const handleRemoveImage = useCallback(
     (imgId: string) => {
@@ -369,8 +454,9 @@ export function StickyNote({
         }}
       >
         <input
-          value={note.title}
-          onChange={(e) => onUpdate(note.id, { title: e.target.value })}
+          value={draftTitle}
+          onBlur={(e) => flushTitleSave(e.target.value)}
+          onChange={(e) => setDraftTitle(e.target.value)}
           placeholder="Title"
           style={{
             flex: 1,
@@ -433,9 +519,10 @@ export function StickyNote({
       >
         <textarea
           ref={textareaRef}
-          value={note.text}
+          value={draftText}
+          onBlur={(e) => flushTextSave(e.target.value)}
           onChange={(e) => {
-            onUpdate(note.id, { text: e.target.value });
+            setDraftText(e.target.value);
             e.target.style.height = "auto";
             e.target.style.height = e.target.scrollHeight + "px";
           }}
