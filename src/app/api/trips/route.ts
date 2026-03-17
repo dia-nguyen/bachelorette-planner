@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
@@ -88,8 +89,8 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Generate a short, unique join code guests can use to self-join
-  const joinCode = crypto.randomUUID().replace(/-/g, "").substring(0, 8).toUpperCase();
+  // Generate a high-entropy join code (~7.2×10²¹ possibilities with 12 base64url chars).
+  const joinCode = randomBytes(8).toString("base64url").substring(0, 12).toUpperCase();
 
   // Insert the trip
   const { data: tripRow, error: tripError } = await admin
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
 
   if (tripError || !tripRow) {
     return NextResponse.json(
-      { error: tripError?.message ?? "Failed to create trip." },
+      { error: "An unexpected error occurred." },
       { status: 500 },
     );
   }

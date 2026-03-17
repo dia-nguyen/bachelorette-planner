@@ -1271,7 +1271,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             body: JSON.stringify({
               id: budgetId,
               title: input.budgetTitleOverride || input.title,
-              category: input.budgetCategory || "MISC",
+              category: input.budgetCategory || "OTHER",
               plannedAmount: input.budgetPlannedAmount || 0,
               actualAmount: input.budgetActualAmount || 0,
               currency: "USD",

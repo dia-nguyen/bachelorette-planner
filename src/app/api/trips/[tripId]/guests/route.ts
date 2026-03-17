@@ -19,20 +19,36 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const [membershipsRes, usersRes] = await Promise.all([
-      supabase.from("memberships").select("*").eq("trip_id", tripId),
-      supabase.from("users").select("id,name,email,avatar_url,custom_fields"),
-    ]);
+    const membershipsRes = await supabase
+      .from("memberships")
+      // select("*") intentional — all columns are spread into the response shape consumed by the client
+      .select("*")
+      .eq("trip_id", tripId);
 
     if (membershipsRes.error) {
-      return NextResponse.json({ error: membershipsRes.error.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
 
-    if (usersRes.error) {
-      return NextResponse.json({ error: usersRes.error.message }, { status: 500 });
+    // Only fetch users who are actually members of this trip to prevent data leakage.
+    const memberIds = (membershipsRes.data ?? [])
+      .map((m) => (m.user_id ?? m.profile_id) as string)
+      .filter(Boolean);
+
+    let usersData: Array<{ id: string; name: string | null; email: string | null; avatar_url: string | null; custom_fields: Record<string, string> | null }> = [];
+    if (memberIds.length > 0) {
+      const usersRes = await supabase
+        .from("users")
+        .select("id,name,email,avatar_url,custom_fields")
+        .in("id", memberIds);
+
+      if (usersRes.error) {
+        return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
+      }
+
+      usersData = usersRes.data ?? [];
     }
 
-    const usersById = new Map((usersRes.data ?? []).map((row) => [row.id, row]));
+    const usersById = new Map(usersData.map((row) => [row.id, row]));
     const result = (membershipsRes.data ?? []).map((membership) => ({
       ...membership,
       user: usersById.get((membership.user_id ?? membership.profile_id) as string) ?? null,
@@ -117,7 +133,7 @@ export async function POST(
     });
 
     if (authErr) {
-      return NextResponse.json({ error: authErr.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
 
     // The auth.users -> public.users trigger creates the row on stub auth user creation.
@@ -134,7 +150,7 @@ export async function POST(
     if (userErr) {
       // Clean up the auth user if insert fails
       await admin.auth.admin.deleteUser(stubId);
-      return NextResponse.json({ error: userErr.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
 
     // Create membership
@@ -148,7 +164,7 @@ export async function POST(
     if (memberErr) {
       await admin.from("users").delete().eq("id", stubId);
       await admin.auth.admin.deleteUser(stubId);
-      return NextResponse.json({ error: memberErr.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
 
     return NextResponse.json({ tripId, userId: stubId }, { status: 201 });
@@ -200,6 +216,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
+    // A user can always update their own profile. Updating another user's profile
+    // requires MOH_ADMIN role in this trip.
+    if (userId !== user.id) {
+      const { data: callerMembership, error: callerErr } = await supabase
+        .from("memberships")
+        .select("role")
+        .eq("trip_id", tripId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (callerErr || callerMembership?.role !== "MOH_ADMIN") {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+    }
+
     const admin = createAdminClient();
     const userPatch: Record<string, unknown> = {};
     if (typeof patch.name === "string") userPatch.name = patch.name.trim();
@@ -215,12 +246,12 @@ export async function PATCH(
         .eq("id", userId);
 
       if (userError) {
-        return NextResponse.json({ error: userError.message }, { status: 500 });
+        return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
       }
     }
 
+    // Role changes are admin-only and handled separately — do not accept role from user input.
     const membershipPatch: Record<string, unknown> = {};
-    if (typeof patch.role === "string") membershipPatch.role = patch.role;
     if (typeof patch.account_status === "string") {
       membershipPatch.account_status = patch.account_status;
     } else if (typeof patch.invite_status === "string") {
@@ -236,7 +267,7 @@ export async function PATCH(
         .eq("user_id", userId);
 
       if (membershipError) {
-        return NextResponse.json({ error: membershipError.message }, { status: 500 });
+        return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
       }
     }
 

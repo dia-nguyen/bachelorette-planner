@@ -12,7 +12,10 @@ interface StubUserRow {
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") ?? "/";
+  // Validate next is a safe relative path to prevent open redirect attacks.
+  // Reject empty paths, absolute URLs (//evil.com), and anything not starting with /.
+  const rawNext = requestUrl.searchParams.get("next") ?? "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
   if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase") {
     return NextResponse.redirect(new URL("/", request.url));

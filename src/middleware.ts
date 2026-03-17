@@ -4,7 +4,10 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATH_PREFIXES = ["/login", "/auth/callback", "/invite"];
 
 export async function middleware(request: NextRequest) {
-  if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase") {
+  // TODO: Move to server-only env var. NEXT_PUBLIC_ prefix makes this client-readable.
+  // Changed from !== "supabase" to === "demo" so any unrecognized value defaults to
+  // auth enforcement (fail-closed) rather than bypassing auth.
+  if (process.env.NEXT_PUBLIC_DATA_MODE === "demo") {
     return NextResponse.next();
   }
 

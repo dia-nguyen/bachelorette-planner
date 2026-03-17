@@ -23,7 +23,9 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/";
+  // Validate next is a safe relative path to prevent open redirect attacks.
+  const rawNext = searchParams.get("next") ?? "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
   async function handleGoogleSignIn() {
     setError(null);

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertTripMember } from "@/lib/supabase/assert-trip-member";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildMoodboardStoragePath,
@@ -28,6 +29,9 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
+
   const formData = await request.formData();
   const imageId = formData.get("imageId");
   const file = formData.get("file");
@@ -43,6 +47,14 @@ export async function POST(
     return NextResponse.json(
       { error: "Only image uploads are supported." },
       { status: 400 },
+    );
+  }
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { error: "File too large. Maximum size is 5MB." },
+      { status: 413 },
     );
   }
 

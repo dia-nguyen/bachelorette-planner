@@ -5,6 +5,7 @@ import {
   MOODBOARD_IMAGES_BUCKET,
 } from "@/lib/moodboard/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertTripMember } from "@/lib/supabase/assert-trip-member";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -158,6 +159,9 @@ export async function GET(
     return jsonMoodboardError("Unauthorized.", 401);
   }
 
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
+
   const { data: notes, error: notesError } = await supabase
     .from("moodboard_notes")
     .select("*")
@@ -219,14 +223,15 @@ export async function POST(
     return jsonMoodboardError("Unauthorized.", 401);
   }
 
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
+
   const body = (await request.json()) as Partial<MoodboardNote>;
   const dbRow: Record<string, unknown> = {
     ...toDbPatch(body as Record<string, unknown>),
     trip_id: tripId,
     created_by_user_id: user.id,
   };
-
-  if (body.id) dbRow.id = body.id;
 
   const { data, error } = await supabase
     .from("moodboard_notes")
@@ -254,6 +259,9 @@ export async function PATCH(
   if (!user) {
     return jsonMoodboardError("Unauthorized.", 401);
   }
+
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
 
   const { id, patch } = (await request.json()) as {
     id: string;
@@ -355,6 +363,9 @@ export async function DELETE(
     return jsonMoodboardError("Unauthorized.", 401);
   }
 
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
+
   const { id } = (await request.json()) as { id: string };
   if (!id) {
     return jsonMoodboardError("id is required.", 400);
@@ -399,6 +410,9 @@ export async function PUT(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
 
   const notes = (await request.json()) as MoodboardNote[];
 

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertTripMember } from "@/lib/supabase/assert-trip-member";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -23,6 +24,9 @@ export async function GET(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  const memberCheck = await assertTripMember(supabase, tripId, user.id);
+  if (memberCheck instanceof NextResponse) return memberCheck;
 
   // Run queries in two small batches to stay within connection limits.
   const [tripRes, membershipsRes, eventsRes, tasksRes] = await Promise.all([
@@ -56,7 +60,7 @@ export async function GET(
       .in("id", Array.from(memberIds));
 
     if (usersError) {
-      return NextResponse.json({ error: usersError.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
 
     profiles = (users ?? []) as Record<string, unknown>[];
@@ -152,7 +156,7 @@ export async function PATCH(
     .maybeSingle();
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, trip: tripRow });

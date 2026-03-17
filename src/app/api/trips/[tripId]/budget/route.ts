@@ -1,4 +1,5 @@
 import { demoRepository } from "@/lib/data";
+import { assertTripMember } from "@/lib/supabase/assert-trip-member";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -6,6 +7,7 @@ const isSupabase = () => process.env.NEXT_PUBLIC_DATA_MODE === "supabase";
 
 // Map camelCase domain keys → snake_case DB columns for budget_items
 const FIELD_MAP: Record<string, string> = {
+  id: "id",
   title: "title",
   category: "category",
   plannedAmount: "planned_amount",
@@ -69,12 +71,14 @@ export async function GET(
     } = await supabase.auth.getUser();
     if (!user)
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const memberCheck = await assertTripMember(supabase, tripId, user.id);
+    if (memberCheck instanceof NextResponse) return memberCheck;
     const { data, error } = await supabase
       .from("budget_items")
       .select("*")
       .eq("trip_id", tripId);
     if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     return NextResponse.json(data);
   }
   const items = demoRepository.getBudgetItems(tripId);
@@ -95,19 +99,20 @@ export async function POST(
     } = await supabase.auth.getUser();
     if (!user)
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const memberCheck = await assertTripMember(supabase, tripId, user.id);
+    if (memberCheck instanceof NextResponse) return memberCheck;
 
     const dbRow: Record<string, unknown> = {
       ...toDbPatch(body),
       trip_id: tripId,
     };
-    if (body.id) dbRow.id = body.id;
     const { data, error } = await supabase
       .from("budget_items")
       .insert(dbRow)
       .select()
       .single();
     if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     return NextResponse.json(data, { status: 201 });
   }
 
@@ -141,6 +146,8 @@ export async function PATCH(
     } = await supabase.auth.getUser();
     if (!user)
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const memberCheck = await assertTripMember(supabase, tripId, user.id);
+    if (memberCheck instanceof NextResponse) return memberCheck;
 
     const dbPatch = toDbPatch(patch);
     const { data, error } = await supabase
@@ -151,7 +158,7 @@ export async function PATCH(
       .select()
       .single();
     if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     return NextResponse.json(data);
   }
 
@@ -177,6 +184,8 @@ export async function DELETE(
     } = await supabase.auth.getUser();
     if (!user)
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const memberCheck = await assertTripMember(supabase, tripId, user.id);
+    if (memberCheck instanceof NextResponse) return memberCheck;
 
     const { error } = await supabase
       .from("budget_items")
@@ -184,7 +193,7 @@ export async function DELETE(
       .eq("id", id)
       .eq("trip_id", tripId);
     if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
