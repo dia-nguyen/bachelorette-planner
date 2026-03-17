@@ -6,7 +6,7 @@
 
 export type Role = "MOH_ADMIN" | "GUEST_CONFIRMED";
 
-export type InviteStatus = "PENDING" | "ACCEPTED" | "DECLINED";
+export type AccountStatus = "INVITED" | "CLAIMED";
 
 export type EventStatus = "DRAFT" | "PLANNED" | "CONFIRMED" | "CANCELED";
 
@@ -58,6 +58,7 @@ export interface Trip {
   location: string;
   description?: string;
   createdByUserId: string;
+  joinCode?: string;
   /** Custom fields to collect for each guest */
   guestFieldSchema?: GuestFieldDef[];
 }
@@ -66,7 +67,7 @@ export interface Membership {
   tripId: string;
   userId: string;
   role: Role;
-  inviteStatus: InviteStatus;
+  accountStatus: AccountStatus;
 }
 
 export interface TripEvent {
@@ -141,7 +142,7 @@ export interface DashboardKPIs {
   outstandingPayments: number;
   tasksCompletionPercent: number;
   guestsInvited: number;
-  guestsConfirmed: number;
+  guestsClaimed: number;
 }
 
 export interface CategoryBreakdown {
@@ -173,6 +174,19 @@ export interface DashboardData {
   myTasks: Task[];
   allTasksSummary: TasksSummary;
   paymentsSummary: PaymentSummary[];
+}
+
+// ---- Invites ----
+
+export interface Invite {
+  id: string;
+  tripId: string;
+  email: string;
+  token: string;
+  createdBy: string;
+  claimedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
 }
 
 // ---- Context panel ----
@@ -218,6 +232,8 @@ export interface PlanActivityInput {
   budgetCategory?: BudgetCategory;
   budgetPlannedAmount?: number;
   budgetActualAmount?: number;
+  budgetCostMode?: "total" | "per_person";
+  budgetSplitType?: CostSplitType;
   budgetStatus?: BudgetItemStatus;
   budgetResponsibleId?: string | null;
   budgetPaidById?: string | null;
@@ -271,4 +287,43 @@ export interface Photo {
   uploadedByUserId: string;
   relatedEventId: string | null;
   createdAt: string; // ISO
+}
+
+// ---- Moodboard ----
+
+export type StickyNoteColor =
+  | "yellow"
+  | "pink"
+  | "blue"
+  | "green"
+  | "purple"
+  | "orange";
+
+/** A single image attached to a sticky note */
+export interface NoteImage {
+  id: string;
+  /** Public URL in Supabase mode; base64 data URI in demo mode */
+  dataUrl: string;
+  /** Display width in px */
+  width: number | null;
+  /** Position within the note's image stage */
+  x: number;
+  /** Position within the note's image stage */
+  y: number;
+}
+
+export interface MoodboardNote {
+  id: string;
+  tripId: string;
+  title: string;
+  text: string;
+  images: NoteImage[];
+  color: StickyNoteColor;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  createdByUserId: string;
+  updatedAt: string; // ISO
 }

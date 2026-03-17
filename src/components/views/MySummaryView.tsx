@@ -97,8 +97,8 @@ export function MySummaryView() {
           <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700, margin: 0 }}>{me?.name ?? "My Summary"}</h2>
           <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
             <Badge variant="accent">{myMembership?.role === "MOH_ADMIN" ? "Admin" : "Guest"}</Badge>
-            <Badge variant={myMembership?.inviteStatus === "ACCEPTED" ? "positive" : "warning"}>
-              {myMembership?.inviteStatus ?? "—"}
+            <Badge variant={myMembership?.accountStatus === "CLAIMED" ? "positive" : "warning"}>
+              {myMembership?.accountStatus ?? "—"}
             </Badge>
           </div>
         </div>

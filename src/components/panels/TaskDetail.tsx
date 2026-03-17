@@ -15,6 +15,10 @@ interface TaskDetailProps {
   allBudgetItems: BudgetItem[];
   onUpdate: (patch: Partial<Task>) => void;
   onNavigate: (type: "event" | "budget", id: string) => void;
+  canDelete: boolean;
+  linkedDeleteCount: number;
+  onDeleteOnly: () => void;
+  onDeleteLinked: () => void;
 }
 
 const TASK_STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
@@ -30,6 +34,10 @@ export function TaskDetail({
   allBudgetItems,
   onUpdate,
   onNavigate,
+  canDelete,
+  linkedDeleteCount,
+  onDeleteOnly,
+  onDeleteLinked,
 }: TaskDetailProps) {
   function toDraft(t: Task) {
     return {
@@ -45,6 +53,7 @@ export function TaskDetail({
   }
 
   const [editing, setEditing] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [draft, setDraft] = useState(() => toDraft(task));
 
   const handleEdit = () => {
@@ -215,90 +224,132 @@ export function TaskDetail({
 
   // ---- VIEW MODE ----
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700, marginBottom: 8 }}>
-            {task.title}
-          </h2>
+    <>
+      <div className="flex flex-col gap-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700, marginBottom: 8 }}>
+              {task.title}
+            </h2>
+            <div className="flex items-center gap-2">
+              <Badge variant={taskStatusVariant(task.status)}>{task.status.replace("_", " ")}</Badge>
+              <Badge variant={task.priority === "HIGH" ? "negative" : task.priority === "MEDIUM" ? "warning" : "neutral"}>
+                {task.priority}
+              </Badge>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            <Badge variant={taskStatusVariant(task.status)}>{task.status.replace("_", " ")}</Badge>
-            <Badge variant={task.priority === "HIGH" ? "negative" : task.priority === "MEDIUM" ? "warning" : "neutral"}>
-              {task.priority}
-            </Badge>
+            {canDelete && (
+              <button onClick={() => setShowDeleteModal(true)} style={dangerOutlineBtnStyle}>Delete</button>
+            )}
+            <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
           </div>
         </div>
-        <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
-      </div>
 
-      <div>
-        <p style={{ fontWeight: 600, marginBottom: 8 }}>Due Date</p>
-        <p style={{ color: "var(--color-text-secondary)" }}>{dueDate}</p>
-      </div>
-
-      {assignees.length > 0 && (
         <div>
-          <p style={{ fontWeight: 600, marginBottom: 8 }}>Assignees</p>
-          <div className="flex flex-wrap gap-3">
-            {assignees.map((a) => (
-              <div key={a.id} className="flex items-center gap-2">
-                <Avatar name={a.name} color={a.avatarColor} size={28} />
-                <span>{a.name}</span>
-              </div>
+          <p style={{ fontWeight: 600, marginBottom: 8 }}>Due Date</p>
+          <p style={{ color: "var(--color-text-secondary)" }}>{dueDate}</p>
+        </div>
+
+        {assignees.length > 0 && (
+          <div>
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>Assignees</p>
+            <div className="flex flex-wrap gap-3">
+              {assignees.map((a) => (
+                <div key={a.id} className="flex items-center gap-2">
+                  <Avatar name={a.name} color={a.avatarColor} size={28} />
+                  <span>{a.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <p style={{ fontWeight: 600, marginBottom: 8 }}>Description</p>
+          <p style={{ color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+            {task.description || "No description."}
+          </p>
+        </div>
+
+        {(linkedEvent || linkedBudget) && (
+          <div>
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>Linked To</p>
+            <div className="flex flex-wrap gap-2">
+              {linkedEvent && (
+                <button onClick={() => onNavigate("event", linkedEvent.id)} style={linkChipStyle}>
+                  📅 {linkedEvent.title}
+                </button>
+              )}
+              {linkedBudget && (
+                <button onClick={() => onNavigate("budget", linkedBudget.id)} style={linkChipStyle}>
+                  💰 {linkedBudget.title}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <p style={{ fontWeight: 600, marginBottom: 8 }}>Update Status</p>
+          <div className="flex gap-2">
+            {TASK_STATUSES.map((s) => (
+              <button
+                key={s}
+                onClick={() => onUpdate({ status: s })}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-md)",
+                  border: task.status === s ? "2px solid var(--color-accent)" : "1px solid var(--color-border)",
+                  background: task.status === s ? "var(--color-accent-soft)" : "var(--color-bg-surface)",
+                  fontSize: "var(--font-sm)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                {s.replace("_", " ")}
+              </button>
             ))}
           </div>
         </div>
-      )}
-
-      <div>
-        <p style={{ fontWeight: 600, marginBottom: 8 }}>Description</p>
-        <p style={{ color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-          {task.description || "No description."}
-        </p>
       </div>
 
-      {(linkedEvent || linkedBudget) && (
-        <div>
-          <p style={{ fontWeight: 600, marginBottom: 8 }}>Linked To</p>
-          <div className="flex flex-wrap gap-2">
-            {linkedEvent && (
-              <button onClick={() => onNavigate("event", linkedEvent.id)} style={linkChipStyle}>
-                📅 {linkedEvent.title}
+      {showDeleteModal && (
+        <div style={modalOverlayStyle} onClick={() => setShowDeleteModal(false)}>
+          <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700, marginBottom: 8 }}>Delete Task</h3>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)", marginBottom: 16 }}>
+              Choose whether to delete only this task or remove the full linked set.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  onDeleteOnly();
+                }}
+                style={modalOptionOutlineStyle}
+              >
+                Delete Task Only
               </button>
-            )}
-            {linkedBudget && (
-              <button onClick={() => onNavigate("budget", linkedBudget.id)} style={linkChipStyle}>
-                💰 {linkedBudget.title}
-              </button>
-            )}
+              {linkedDeleteCount > 0 && (
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    onDeleteLinked();
+                  }}
+                  style={modalOptionDangerStyle}
+                >
+                  Delete Task + {linkedDeleteCount} Linked Item{linkedDeleteCount === 1 ? "" : "s"}
+                </button>
+              )}
+            </div>
+            <div className="flex justify-end" style={{ marginTop: 16 }}>
+              <button onClick={() => setShowDeleteModal(false)} style={cancelBtnStyle}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
-
-      {/* Quick status controls */}
-      <div>
-        <p style={{ fontWeight: 600, marginBottom: 8 }}>Update Status</p>
-        <div className="flex gap-2">
-          {TASK_STATUSES.map((s) => (
-            <button
-              key={s}
-              onClick={() => onUpdate({ status: s })}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "var(--radius-md)",
-                border: task.status === s ? "2px solid var(--color-accent)" : "1px solid var(--color-border)",
-                background: task.status === s ? "var(--color-accent-soft)" : "var(--color-bg-surface)",
-                fontSize: "var(--font-sm)",
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
-            >
-              {s.replace("_", " ")}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -338,6 +389,60 @@ const editBtnStyle: React.CSSProperties = {
   background: "var(--color-bg-surface)",
   fontSize: "var(--font-sm)",
   fontWeight: 500,
+  cursor: "pointer",
+};
+
+const dangerOutlineBtnStyle: React.CSSProperties = {
+  padding: "6px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid rgba(220, 38, 38, 0.28)",
+  background: "var(--color-bg-surface)",
+  color: "var(--color-danger, #dc2626)",
+  fontSize: "var(--font-sm)",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17, 24, 39, 0.38)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 200,
+  padding: 16,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  width: "min(420px, 100%)",
+  background: "var(--color-bg-surface)",
+  borderRadius: "var(--radius-lg)",
+  padding: 20,
+  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.18)",
+};
+
+const modalOptionDangerStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "none",
+  background: "var(--color-danger, #dc2626)",
+  color: "#fff",
+  fontSize: "var(--font-sm)",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const modalOptionOutlineStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid rgba(220, 38, 38, 0.28)",
+  background: "var(--color-bg-surface)",
+  color: "var(--color-danger, #dc2626)",
+  fontSize: "var(--font-sm)",
+  fontWeight: 600,
   cursor: "pointer",
 };
 

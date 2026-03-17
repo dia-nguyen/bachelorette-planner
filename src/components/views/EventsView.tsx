@@ -8,10 +8,6 @@ export function EventsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Events</h2>
-      </div>
-
       {events.length === 0 ? (
         <EmptyState
           message="No events planned yet"

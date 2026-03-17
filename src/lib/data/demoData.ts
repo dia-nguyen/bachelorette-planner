@@ -1,7 +1,9 @@
 import type {
   BudgetItem,
   ChecklistItem,
+  Invite,
   Membership,
+  MoodboardNote,
   Photo,
   Poll,
   Task,
@@ -68,37 +70,37 @@ export const demoMemberships: Membership[] = [
     tripId: "trip1",
     userId: "u1",
     role: "MOH_ADMIN",
-    inviteStatus: "ACCEPTED",
+    accountStatus: "CLAIMED",
   },
   {
     tripId: "trip1",
     userId: "u2",
     role: "GUEST_CONFIRMED",
-    inviteStatus: "ACCEPTED",
+    accountStatus: "CLAIMED",
   },
   {
     tripId: "trip1",
     userId: "u3",
     role: "GUEST_CONFIRMED",
-    inviteStatus: "ACCEPTED",
+    accountStatus: "CLAIMED",
   },
   {
     tripId: "trip1",
     userId: "u4",
     role: "GUEST_CONFIRMED",
-    inviteStatus: "ACCEPTED",
+    accountStatus: "CLAIMED",
   },
   {
     tripId: "trip1",
     userId: "u5",
     role: "GUEST_CONFIRMED",
-    inviteStatus: "PENDING",
+    accountStatus: "INVITED",
   },
   {
     tripId: "trip1",
     userId: "u6",
     role: "GUEST_CONFIRMED",
-    inviteStatus: "PENDING",
+    accountStatus: "INVITED",
   },
 ];
 
@@ -613,6 +615,9 @@ export const demoPolls: Poll[] = [
 // ---- Photos (placeholder URLs for demo) ----
 export const demoPhotos: Photo[] = [];
 
+// ---- Moodboard Notes ----
+export const demoMoodboardNotes: MoodboardNote[] = [];
+
 // ---- Entire demo store shape ----
 export interface DemoStore {
   users: User[];
@@ -624,6 +629,8 @@ export interface DemoStore {
   checklistItems: ChecklistItem[];
   polls: Poll[];
   photos: Photo[];
+  invites: Invite[];
+  moodboardNotes: MoodboardNote[];
 }
 
 export const initialDemoStore: DemoStore = {
@@ -636,4 +643,6 @@ export const initialDemoStore: DemoStore = {
   checklistItems: demoChecklistItems,
   polls: demoPolls,
   photos: demoPhotos,
+  invites: [],
+  moodboardNotes: demoMoodboardNotes,
 };

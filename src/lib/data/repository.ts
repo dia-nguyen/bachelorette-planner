@@ -2,7 +2,9 @@ import type {
   BudgetItem,
   ChecklistItem,
   GuestFieldDef,
+  Invite,
   Membership,
+  MoodboardNote,
   Photo,
   Poll,
   Task,
@@ -36,6 +38,7 @@ export interface Repository {
     userId: string,
     patch: Partial<Membership>,
   ): void;
+  removeGuestFromTrip(tripId: string, userId: string): void;
 
   // Events
   getEvents(tripId: string): TripEvent[];
@@ -74,4 +77,16 @@ export interface Repository {
   getPhotos(tripId: string): Photo[];
   addPhoto(photo: Photo): void;
   deletePhoto(photoId: string): void;
+
+  // Invites
+  getInvites(tripId: string): Invite[];
+  addInvite(invite: Invite): void;
+  getInviteByToken(token: string): Invite | undefined;
+  claimInvite(token: string, claimedAt: string): void;
+  // Moodboard Notes
+  getMoodboardNotes(tripId: string): MoodboardNote[];
+  setMoodboardNotes(tripId: string, notes: MoodboardNote[]): void;
+  addMoodboardNote(note: MoodboardNote): void;
+  updateMoodboardNote(noteId: string, patch: Partial<MoodboardNote>): void;
+  deleteMoodboardNote(noteId: string): void;
 }

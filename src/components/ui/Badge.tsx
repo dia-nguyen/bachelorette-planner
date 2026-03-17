@@ -1,6 +1,6 @@
 "use client";
 
-import type { BudgetItemStatus, EventStatus, InviteStatus, TaskStatus } from "@/lib/data";
+import type { BudgetItemStatus, EventStatus, AccountStatus, TaskStatus } from "@/lib/data";
 
 type BadgeVariant = "neutral" | "positive" | "warning" | "negative" | "accent";
 
@@ -66,10 +66,9 @@ export function budgetStatusVariant(s: BudgetItemStatus): BadgeVariant {
   }
 }
 
-export function inviteStatusVariant(s: InviteStatus): BadgeVariant {
+export function accountStatusVariant(s: AccountStatus): BadgeVariant {
   switch (s) {
-    case "ACCEPTED": return "positive";
-    case "PENDING": return "warning";
-    case "DECLINED": return "negative";
+    case "CLAIMED": return "positive";
+    case "INVITED": return "warning";
   }
 }

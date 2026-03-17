@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Bachelorette Planner",
   description: "Plan the perfect bachelorette weekend — budget, events, tasks, guests.",
+  icons: {
+    icon: "/favicon.png",
+  }
 };
 
 export default function RootLayout({

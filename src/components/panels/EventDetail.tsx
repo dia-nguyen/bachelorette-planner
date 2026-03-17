@@ -13,6 +13,10 @@ interface EventDetailProps {
   onNavigate: (type: "task" | "budget", id: string) => void;
   onToggleAttendee: (userId: string) => void;
   onUpdate: (patch: Partial<TripEvent>) => void;
+  canDelete: boolean;
+  linkedDeleteCount: number;
+  onDeleteOnly: () => void;
+  onDeleteLinked: () => void;
 }
 
 const EVENT_STATUSES: EventStatus[] = ["DRAFT", "PLANNED", "CONFIRMED", "CANCELED"];
@@ -25,6 +29,10 @@ export function EventDetail({
   onNavigate,
   onToggleAttendee,
   onUpdate,
+  canDelete,
+  linkedDeleteCount,
+  onDeleteOnly,
+  onDeleteLinked,
 }: EventDetailProps) {
   function toDraft(ev: TripEvent) {
     return {
@@ -40,6 +48,7 @@ export function EventDetail({
   }
 
   const [editing, setEditing] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [draft, setDraft] = useState(() => toDraft(event));
 
   const handleEdit = () => {
@@ -57,8 +66,9 @@ export function EventDetail({
       status: draft.status,
       startAt: draft.startAt ? new Date(draft.startAt).toISOString() : event.startAt,
       endAt: draft.endAt ? new Date(draft.endAt).toISOString() : undefined,
-      provider: draft.provider.trim() || undefined,
-      confirmationCode: draft.confirmationCode.trim() || undefined,
+      // Send explicit empty strings so PATCH clears DB values instead of skipping keys.
+      provider: draft.provider.trim(),
+      confirmationCode: draft.confirmationCode.trim(),
     });
     setEditing(false);
   };
@@ -259,176 +269,219 @@ export function EventDetail({
 
   // ---- VIEW MODE ----
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700, marginBottom: 8 }}>
-            {event.title}
-          </h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant={eventStatusVariant(event.status)}>{event.status}</Badge>
-            <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
-              ·{" "}
-              {startDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-              {" · "}
-              {startDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-              {endDate && (
-                <>{" – "}{endDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</>
-              )}
-            </span>
+    <>
+      <div className="flex flex-col gap-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700, marginBottom: 8 }}>
+              {event.title}
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={eventStatusVariant(event.status)}>{event.status}</Badge>
+              <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
+                ·{" "}
+                {startDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                {" · "}
+                {startDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                {endDate && (
+                  <>{" – "}{endDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</>
+                )}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {canDelete && (
+              <button onClick={() => setShowDeleteModal(true)} style={dangerOutlineBtnStyle}>Delete</button>
+            )}
+            <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
           </div>
         </div>
-        <button onClick={handleEdit} style={editBtnStyle}>✏️ Edit</button>
-      </div>
 
-      <div className="flex flex-wrap gap-3">
-        {event.location && <span style={factChipStyle}>📍 {event.location}</span>}
-        {duration !== null && <span style={factChipStyle}>⏱ {duration}h</span>}
-        {attendees.length > 0 && <span style={factChipStyle}>👥 {attendees.length} attending</span>}
-      </div>
+        <div className="flex flex-wrap gap-3">
+          {event.location && <span style={factChipStyle}>📍 {event.location}</span>}
+          {duration !== null && <span style={factChipStyle}>⏱ {duration}h</span>}
+          {attendees.length > 0 && <span style={factChipStyle}>👥 {attendees.length} attending</span>}
+        </div>
 
-      {(event.provider || event.confirmationCode) && (
-        <div style={{ background: "var(--color-accent-soft)", borderRadius: "var(--radius-md)", padding: "12px 16px", border: "1px solid var(--color-accent)" }}>
-          <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 6 }}>🎫 Reservation</p>
-          <div className="flex flex-wrap gap-4">
-            {event.provider && <span style={{ fontSize: "var(--font-sm)" }}><strong>Provider:</strong> {event.provider}</span>}
-            {event.confirmationCode && (
-              <span style={{ fontSize: "var(--font-sm)" }}>
-                <strong>Code:</strong>{" "}
-                <code style={{ background: "var(--color-bg-muted)", padding: "2px 6px", borderRadius: 4 }}>{event.confirmationCode}</code>
-              </span>
+        {(event.provider || event.confirmationCode) && (
+          <div style={{ background: "var(--color-accent-soft)", borderRadius: "var(--radius-md)", padding: "12px 16px", border: "1px solid var(--color-accent)" }}>
+            <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 6 }}>🎫 Reservation</p>
+            <div className="flex flex-wrap gap-4">
+              {event.provider && <span style={{ fontSize: "var(--font-sm)" }}><strong>Provider:</strong> {event.provider}</span>}
+              {event.confirmationCode && (
+                <span style={{ fontSize: "var(--font-sm)" }}>
+                  <strong>Code:</strong>{" "}
+                  <code style={{ background: "var(--color-bg-muted)", padding: "2px 6px", borderRadius: 4 }}>{event.confirmationCode}</code>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {budgetItem ? (
+          <div style={{ background: "var(--color-bg-muted)", borderRadius: "var(--radius-md)", padding: "var(--space-md)" }}>
+            <div className="flex items-center justify-between mb-3">
+              <p style={{ fontWeight: 600, fontSize: "var(--font-sm)" }}>💰 Cost</p>
+              <div className="flex gap-2">
+                {(budgetItem.splitType ?? "even") === "even" ? (
+                  <Badge variant="accent">Even split</Badge>
+                ) : (
+                  <Badge variant="warning">Custom split</Badge>
+                )}
+                <button
+                  onClick={() => onNavigate("budget", budgetItem.id)}
+                  style={{ ...linkChipStyle, fontSize: "var(--font-xs)", padding: "3px 8px" }}
+                >
+                  View budget →
+                </button>
+              </div>
+            </div>
+
+            {(budgetItem.splitType ?? "even") === "even" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Planned</p>
+                  <p style={{ fontSize: 20, fontWeight: 700 }}>{formatCurrency(budgetItem.plannedAmount)}</p>
+                  {attendees.length > 0 && (
+                    <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
+                      {formatCurrency(budgetItem.plannedAmount / attendees.length)}/person
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Actual</p>
+                  <p style={{ fontSize: 20, fontWeight: 700 }}>
+                    {budgetItem.actualAmount > 0 ? formatCurrency(budgetItem.actualAmount) : "—"}
+                  </p>
+                  {budgetItem.actualAmount > 0 && attendees.length > 0 && (
+                    <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
+                      {formatCurrency(budgetItem.actualAmount / attendees.length)}/person
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <div
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: "1fr 70px 70px", borderBottom: "1px solid var(--color-border)", paddingBottom: 6, marginBottom: 4 }}
+                >
+                  <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--color-text-secondary)" }}>Person</span>
+                  <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--color-text-secondary)", textAlign: "right" }}>Planned</span>
+                  <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--color-text-secondary)", textAlign: "right" }}>Actual</span>
+                </div>
+                {attendees.map((u) => (
+                  <div key={u.id} className="grid gap-3 items-center py-1" style={{ gridTemplateColumns: "1fr 70px 70px", borderBottom: "1px solid var(--color-border)" }}>
+                    <div className="flex items-center gap-2">
+                      <Avatar name={u.name} color={u.avatarColor} size={20} />
+                      <span style={{ fontSize: "var(--font-sm)" }}>{u.name}</span>
+                    </div>
+                    <span style={{ fontSize: "var(--font-sm)", fontWeight: 500, textAlign: "right" }}>
+                      {budgetItem.plannedSplits?.[u.id] ? formatCurrency(budgetItem.plannedSplits[u.id]) : "—"}
+                    </span>
+                    <span style={{ fontSize: "var(--font-sm)", fontWeight: 500, textAlign: "right" }}>
+                      {budgetItem.actualSplits?.[u.id] ? formatCurrency(budgetItem.actualSplits[u.id]) : "—"}
+                    </span>
+                  </div>
+                ))}
+                <div className="grid gap-3 pt-2" style={{ gridTemplateColumns: "1fr 70px 70px" }}>
+                  <span style={{ fontSize: "var(--font-sm)", fontWeight: 700 }}>Total</span>
+                  <span style={{ fontSize: "var(--font-sm)", fontWeight: 700, textAlign: "right" }}>{formatCurrency(budgetItem.plannedAmount)}</span>
+                  <span style={{ fontSize: "var(--font-sm)", fontWeight: 700, textAlign: "right" }}>{budgetItem.actualAmount > 0 ? formatCurrency(budgetItem.actualAmount) : "—"}</span>
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      )}
+        ) : null}
 
-      {budgetItem ? (
-        <div style={{ background: "var(--color-bg-muted)", borderRadius: "var(--radius-md)", padding: "var(--space-md)" }}>
-          <div className="flex items-center justify-between mb-3">
-            <p style={{ fontWeight: 600, fontSize: "var(--font-sm)" }}>💰 Cost</p>
-            <div className="flex gap-2">
-              {(budgetItem.splitType ?? "even") === "even" ? (
-                <Badge variant="accent">Even split</Badge>
-              ) : (
-                <Badge variant="warning">Custom split</Badge>
-              )}
-              <button
-                onClick={() => onNavigate("budget", budgetItem.id)}
-                style={{ ...linkChipStyle, fontSize: "var(--font-xs)", padding: "3px 8px" }}
-              >
-                View budget →
-              </button>
-            </div>
-          </div>
-
-          {(budgetItem.splitType ?? "even") === "even" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Planned</p>
-                <p style={{ fontSize: 20, fontWeight: 700 }}>{formatCurrency(budgetItem.plannedAmount)}</p>
-                {attendees.length > 0 && (
-                  <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-                    {formatCurrency(budgetItem.plannedAmount / attendees.length)}/person
-                  </p>
-                )}
-              </div>
-              <div>
-                <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Actual</p>
-                <p style={{ fontSize: 20, fontWeight: 700 }}>
-                  {budgetItem.actualAmount > 0 ? formatCurrency(budgetItem.actualAmount) : "—"}
-                </p>
-                {budgetItem.actualAmount > 0 && attendees.length > 0 && (
-                  <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-                    {formatCurrency(budgetItem.actualAmount / attendees.length)}/person
-                  </p>
-                )}
-              </div>
+        <div>
+          <p style={{ fontWeight: 600, marginBottom: 8 }}>Attending</p>
+          {attendees.length > 0 ? (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {attendees.map((u) => (
+                <span key={u.id} className="inline-flex items-center gap-1" style={{ padding: "4px 10px", borderRadius: "var(--radius-pill)", background: "var(--color-accent-soft)", fontSize: "var(--font-sm)", fontWeight: 500 }}>
+                  <Avatar name={u.name} color={u.avatarColor} size={20} />
+                  {u.name}
+                  <button onClick={() => onToggleAttendee(u.id)} style={{ marginLeft: 2, fontSize: "var(--font-xs)", color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }} title="Remove from event">✕</button>
+                </span>
+              ))}
             </div>
           ) : (
-            <div className="flex flex-col gap-1">
-              <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: "1fr 70px 70px", borderBottom: "1px solid var(--color-border)", paddingBottom: 6, marginBottom: 4 }}
-              >
-                <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--color-text-secondary)" }}>Person</span>
-                <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--color-text-secondary)", textAlign: "right" }}>Planned</span>
-                <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--color-text-secondary)", textAlign: "right" }}>Actual</span>
-              </div>
-              {attendees.map((u) => (
-                <div key={u.id} className="grid gap-3 items-center py-1" style={{ gridTemplateColumns: "1fr 70px 70px", borderBottom: "1px solid var(--color-border)" }}>
-                  <div className="flex items-center gap-2">
-                    <Avatar name={u.name} color={u.avatarColor} size={20} />
-                    <span style={{ fontSize: "var(--font-sm)" }}>{u.name}</span>
-                  </div>
-                  <span style={{ fontSize: "var(--font-sm)", fontWeight: 500, textAlign: "right" }}>
-                    {budgetItem.plannedSplits?.[u.id] ? formatCurrency(budgetItem.plannedSplits[u.id]) : "—"}
-                  </span>
-                  <span style={{ fontSize: "var(--font-sm)", fontWeight: 500, textAlign: "right" }}>
-                    {budgetItem.actualSplits?.[u.id] ? formatCurrency(budgetItem.actualSplits[u.id]) : "—"}
-                  </span>
-                </div>
-              ))}
-              <div className="grid gap-3 pt-2" style={{ gridTemplateColumns: "1fr 70px 70px" }}>
-                <span style={{ fontSize: "var(--font-sm)", fontWeight: 700 }}>Total</span>
-                <span style={{ fontSize: "var(--font-sm)", fontWeight: 700, textAlign: "right" }}>{formatCurrency(budgetItem.plannedAmount)}</span>
-                <span style={{ fontSize: "var(--font-sm)", fontWeight: 700, textAlign: "right" }}>{budgetItem.actualAmount > 0 ? formatCurrency(budgetItem.actualAmount) : "—"}</span>
+            <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 8 }}>No attendees selected yet.</p>
+          )}
+          {nonAttendees.length > 0 && (
+            <div>
+              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 6 }}>Add attendees:</p>
+              <div className="flex flex-wrap gap-2">
+                {nonAttendees.map((u) => (
+                  <button key={u.id} onClick={() => onToggleAttendee(u.id)} style={{ padding: "4px 10px", borderRadius: "var(--radius-pill)", border: "1px dashed var(--color-border)", background: "var(--color-bg-surface)", fontSize: "var(--font-sm)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Avatar name={u.name} color={u.avatarColor} size={18} />
+                    <span>+ {u.name}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
-      ) : null}
 
-      <div>
-        <p style={{ fontWeight: 600, marginBottom: 8 }}>Attending</p>
-        {attendees.length > 0 ? (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {attendees.map((u) => (
-              <span key={u.id} className="inline-flex items-center gap-1" style={{ padding: "4px 10px", borderRadius: "var(--radius-pill)", background: "var(--color-accent-soft)", fontSize: "var(--font-sm)", fontWeight: 500 }}>
-                <Avatar name={u.name} color={u.avatarColor} size={20} />
-                {u.name}
-                <button onClick={() => onToggleAttendee(u.id)} style={{ marginLeft: 2, fontSize: "var(--font-xs)", color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }} title="Remove from event">✕</button>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 8 }}>No attendees selected yet.</p>
-        )}
-        {nonAttendees.length > 0 && (
+        {event.description && (
           <div>
-            <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 6 }}>Add attendees:</p>
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>Description</p>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-md)", lineHeight: 1.5 }}>{event.description}</p>
+          </div>
+        )}
+
+        {(budgetItem || relatedTasks.length > 0) && (
+          <div>
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>Linked Items</p>
             <div className="flex flex-wrap gap-2">
-              {nonAttendees.map((u) => (
-                <button key={u.id} onClick={() => onToggleAttendee(u.id)} style={{ padding: "4px 10px", borderRadius: "var(--radius-pill)", border: "1px dashed var(--color-border)", background: "var(--color-bg-surface)", fontSize: "var(--font-sm)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <Avatar name={u.name} color={u.avatarColor} size={18} />
-                  <span>+ {u.name}</span>
-                </button>
+              {budgetItem && (
+                <button onClick={() => onNavigate("budget", budgetItem.id)} style={linkChipStyle}>💰 {budgetItem.title}</button>
+              )}
+              {relatedTasks.map((t) => (
+                <button key={t.id} onClick={() => onNavigate("task", t.id)} style={linkChipStyle}>✅ {t.title}</button>
               ))}
             </div>
           </div>
         )}
       </div>
 
-      {event.description && (
-        <div>
-          <p style={{ fontWeight: 600, marginBottom: 8 }}>Description</p>
-          <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-md)", lineHeight: 1.5 }}>{event.description}</p>
-        </div>
-      )}
-
-      {(budgetItem || relatedTasks.length > 0) && (
-        <div>
-          <p style={{ fontWeight: 600, marginBottom: 8 }}>Linked Items</p>
-          <div className="flex flex-wrap gap-2">
-            {budgetItem && (
-              <button onClick={() => onNavigate("budget", budgetItem.id)} style={linkChipStyle}>💰 {budgetItem.title}</button>
-            )}
-            {relatedTasks.map((t) => (
-              <button key={t.id} onClick={() => onNavigate("task", t.id)} style={linkChipStyle}>✅ {t.title}</button>
-            ))}
+      {showDeleteModal && (
+        <div style={modalOverlayStyle} onClick={() => setShowDeleteModal(false)}>
+          <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700, marginBottom: 8 }}>Delete Event</h3>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)", marginBottom: 16 }}>
+              Choose whether to delete only this event or remove the full linked set.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  onDeleteOnly();
+                }}
+                style={modalOptionOutlineStyle}
+              >
+                Delete Event Only
+              </button>
+              {linkedDeleteCount > 0 && (
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    onDeleteLinked();
+                  }}
+                  style={modalOptionDangerStyle}
+                >
+                  Delete Event + {linkedDeleteCount} Linked Item{linkedDeleteCount === 1 ? "" : "s"}
+                </button>
+              )}
+            </div>
+            <div className="flex justify-end" style={{ marginTop: 16 }}>
+              <button onClick={() => setShowDeleteModal(false)} style={cancelBtnStyle}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -504,4 +557,58 @@ const cancelBtnStyle: React.CSSProperties = {
   fontWeight: 500,
   cursor: "pointer",
   fontSize: "var(--font-sm)",
+};
+
+const dangerOutlineBtnStyle: React.CSSProperties = {
+  padding: "6px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid rgba(220, 38, 38, 0.28)",
+  background: "var(--color-bg-surface)",
+  color: "var(--color-danger, #dc2626)",
+  fontSize: "var(--font-sm)",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17, 24, 39, 0.38)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 200,
+  padding: 16,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  width: "min(420px, 100%)",
+  background: "var(--color-bg-surface)",
+  borderRadius: "var(--radius-lg)",
+  padding: 20,
+  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.18)",
+};
+
+const modalOptionDangerStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "none",
+  background: "var(--color-danger, #dc2626)",
+  color: "#fff",
+  fontSize: "var(--font-sm)",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const modalOptionOutlineStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid rgba(220, 38, 38, 0.28)",
+  background: "var(--color-bg-surface)",
+  color: "var(--color-danger, #dc2626)",
+  fontSize: "var(--font-sm)",
+  fontWeight: 600,
+  cursor: "pointer",
 };

@@ -2,12 +2,14 @@
 
 import { AppShell } from "@/components/AppShell";
 import { AppProvider } from "@/lib/context";
+import { Suspense } from "react";
 
 export default function Home() {
   return (
     <AppProvider>
-      <AppShell />
+      <Suspense>
+        <AppShell />
+      </Suspense>
     </AppProvider>
   );
 }
-

@@ -68,8 +68,8 @@ export function computeKPIs(
   const totalTasks = tasks.length;
 
   const guestsInvited = memberships.length;
-  const guestsConfirmed = memberships.filter(
-    (m) => m.inviteStatus === "ACCEPTED",
+  const guestsClaimed = memberships.filter(
+    (m) => m.accountStatus === "CLAIMED",
   ).length;
 
   return {
@@ -81,7 +81,7 @@ export function computeKPIs(
     outstandingPayments,
     tasksCompletionPercent: pct(doneTasks, totalTasks),
     guestsInvited,
-    guestsConfirmed,
+    guestsClaimed,
   };
 }
 
@@ -200,11 +200,9 @@ export function computePaymentsSummary(
   memberships: Membership[],
   events: TripEvent[],
 ): PaymentSummary[] {
-  const confirmedUserIds = memberships
-    .filter((m) => m.inviteStatus === "ACCEPTED")
-    .map((m) => m.userId);
+  const allUserIds = memberships.map((m) => m.userId);
 
-  return confirmedUserIds.map((uid) => {
+  return allUserIds.map((uid) => {
     const user = users.find((u) => u.id === uid);
     let planned = 0;
     let actual = 0;

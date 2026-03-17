@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge, EmptyState, inviteStatusVariant } from "@/components/ui";
+import { Badge, EmptyState, accountStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
-import type { GuestFieldDef, InviteStatus, Membership, Role, User } from "@/lib/data";
+import type { AccountStatus, GuestFieldDef, Membership, Role, User } from "@/lib/data";
 import { useRef, useState } from "react";
 
 const FIELD_TYPES: { value: GuestFieldDef["type"]; label: string; }[] = [
@@ -19,10 +19,9 @@ const ROLES: { value: Role; label: string; }[] = [
   { value: "GUEST_CONFIRMED", label: "Guest" },
 ];
 
-const INVITE_STATUSES: { value: InviteStatus; label: string; }[] = [
-  { value: "PENDING", label: "Pending" },
-  { value: "ACCEPTED", label: "Accepted" },
-  { value: "DECLINED", label: "Declined" },
+const ACCOUNT_STATUSES: { value: AccountStatus; label: string; }[] = [
+  { value: "INVITED", label: "Invited" },
+  { value: "CLAIMED", label: "Claimed" },
 ];
 
 function SchemaManager({
@@ -190,20 +189,24 @@ function GuestTableRow({
   colSpan,
   onSave,
   onStatusChange,
+  onDelete,
+  canDelete,
 }: {
   user: User;
   membership: Membership;
   fieldSchema: GuestFieldDef[];
   colSpan: number;
-  onSave: (patch: { name: string; email: string; role: Role; inviteStatus: InviteStatus; customFields: Record<string, string>; }) => void;
-  onStatusChange: (status: InviteStatus) => void;
+  onSave: (patch: { name: string; email: string; role: Role; accountStatus: AccountStatus; customFields: Record<string, string>; }) => void;
+  onStatusChange: (status: AccountStatus) => void;
+  onDelete: () => void;
+  canDelete: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({
     name: user.name,
     email: user.email,
     role: membership.role,
-    inviteStatus: membership.inviteStatus,
+    accountStatus: membership.accountStatus,
     customFields: { ...(user.customFields ?? {}) },
   });
 
@@ -212,7 +215,7 @@ function GuestTableRow({
       name: user.name,
       email: user.email,
       role: membership.role,
-      inviteStatus: membership.inviteStatus,
+      accountStatus: membership.accountStatus,
       customFields: { ...(user.customFields ?? {}) },
     });
     setEditing(true);
@@ -244,8 +247,8 @@ function GuestTableRow({
           </Badge>
         </td>
         <td style={cellSt}>
-          <Badge variant={inviteStatusVariant(membership.inviteStatus)}>
-            {membership.inviteStatus}
+          <Badge variant={accountStatusVariant(membership.accountStatus)}>
+            {membership.accountStatus}
           </Badge>
         </td>
         {fieldSchema.map((f) => (
@@ -255,11 +258,18 @@ function GuestTableRow({
         ))}
         <td style={{ ...cellSt, textAlign: "right", whiteSpace: "nowrap" }}>
           <div className="flex gap-1 justify-end">
-            {membership.inviteStatus === "PENDING" && (
-              <>
-                <button onClick={() => onStatusChange("ACCEPTED")} style={{ padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-status-positive)", border: "none", fontSize: 11, cursor: "pointer", color: "#166534", fontWeight: 600 }}>Accept</button>
-                <button onClick={() => onStatusChange("DECLINED")} style={{ padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-status-negative)", border: "none", fontSize: 11, cursor: "pointer", color: "#991B1B", fontWeight: 600 }}>Decline</button>
-              </>
+            {canDelete && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`Delete ${user.name} from this trip?`)) {
+                    onDelete();
+                  }
+                }}
+                title="Delete"
+                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "#dc2626" }}
+              >
+                🗑
+              </button>
             )}
             <button onClick={openEdit} title="Edit" style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "3px 8px", cursor: "pointer", fontSize: 12, color: "var(--color-text-secondary)" }}>✏️</button>
           </div>
@@ -287,9 +297,9 @@ function GuestTableRow({
                   </select>
                 </label>
                 <label style={{ flex: "0 0 130px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-                  RSVP
-                  <select style={{ ...selectSt, marginTop: 4 }} value={draft.inviteStatus} onChange={(e) => setDraft((d) => ({ ...d, inviteStatus: e.target.value as InviteStatus }))}>
-                    {INVITE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  Status
+                  <select style={{ ...selectSt, marginTop: 4 }} value={draft.accountStatus} onChange={(e) => setDraft((d) => ({ ...d, accountStatus: e.target.value as AccountStatus }))}>
+                    {ACCOUNT_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </label>
                 {fieldSchema.map((f) => (
@@ -317,64 +327,33 @@ function GuestTableRow({
 
 export function GuestsView() {
   const {
-    memberships, users, guestFieldSchema, tripId,
-    inviteUser, updateUser, updateMembershipStatus, updateMemberRole,
+    memberships, users, guestFieldSchema, tripId, currentRole, currentUserId,
+    inviteUser, updateUser, updateMembershipStatus, updateMemberRole, deleteGuest,
     addGuestField, removeGuestField, reorderGuestFields,
   } = useApp();
-  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [showSchemaManager, setShowSchemaManager] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
-  const handleGuestAction = async (action: "add" | "invite") => {
-    if (!name.trim() || !email.trim()) return;
+  const isAdmin = currentRole === "MOH_ADMIN";
 
-    setInviteError(null);
-    setInviteMessage(null);
-
-    if (process.env.NEXT_PUBLIC_DATA_MODE === "demo") {
-      inviteUser(name.trim(), email.trim());
-      setInviteMessage(action === "invite" ? "Guest added in demo mode." : "Guest added.");
-      setName("");
-      setEmail("");
-      setShowInviteForm(false);
-      return;
-    }
-
+  const handleAddGuest = async () => {
+    if (!guestName.trim() || !guestEmail.trim()) return;
+    setAddError(null);
+    setAddLoading(true);
     try {
-      setInviteLoading(true);
-      const res = await fetch("/api/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          tripId,
-          action,
-        }),
-      });
-
-      const payload = await res.json();
-      if (!res.ok) {
-        setInviteError(payload?.error ?? (action === "invite" ? "Failed to send invite." : "Failed to add guest."));
-        return;
-      }
-
-      setInviteMessage(action === "invite" ? "Invite email sent." : "Guest added without invite.");
-      setName("");
-      setEmail("");
-      setShowInviteForm(false);
-    } catch {
-      setInviteError(action === "invite" ? "Unable to send invite right now." : "Unable to add guest right now.");
+      await inviteUser(guestName.trim(), guestEmail.trim());
+      setGuestName("");
+      setGuestEmail("");
+      setShowAddForm(false);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : "Failed to add guest.");
     } finally {
-      setInviteLoading(false);
+      setAddLoading(false);
     }
-
-    setName("");
-    setEmail("");
   };
 
   // fixed cols: Guest, Email, Role, RSVP, ...custom, Actions
@@ -386,68 +365,77 @@ export function GuestsView() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 style={{ fontSize: "var(--font-xl)", fontWeight: 700 }}>Guests</h2>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowSchemaManager((v) => !v)}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: showSchemaManager ? "var(--color-bg-muted)" : "var(--color-bg-surface)", fontWeight: 500, cursor: "pointer", fontSize: "var(--font-sm)" }}
-          >
-            ⚙️ Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}
-          </button>
-          <button
-            onClick={() => setShowInviteForm((v) => !v)}
-            style={{ padding: "8px 20px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 500, cursor: "pointer" }}
-          >
-            + Add Guest
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowSchemaManager((v) => !v)}
+              style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: showSchemaManager ? "var(--color-bg-muted)" : "var(--color-bg-surface)", fontWeight: 500, cursor: "pointer", fontSize: "var(--font-sm)" }}
+            >
+              ⚙️ Manage Fields{guestFieldSchema.length > 0 ? ` (${guestFieldSchema.length})` : ""}
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => { setShowAddForm((v) => !v); setAddError(null); }}
+              style={{ padding: "8px 20px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 500, cursor: "pointer" }}
+            >
+              + Add Guest
+            </button>
+          )}
         </div>
       </div>
 
-      {showSchemaManager && (
+      {showSchemaManager && isAdmin && (
         <SchemaManager schema={guestFieldSchema} onAdd={addGuestField} onRemove={removeGuestField} onReorder={reorderGuestFields} onClose={() => setShowSchemaManager(false)} />
       )}
 
-      {/* Invite form */}
-      {showInviteForm && (
+      {/* Add guest form (admin only) */}
+      {showAddForm && isAdmin && (
         <div style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "16px 20px" }}>
+          <p style={{ fontWeight: 600, fontSize: "var(--font-sm)", marginBottom: 12 }}>Add a new guest</p>
           <div className="flex gap-3 flex-wrap items-end">
             <label style={{ flex: "1 1 160px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
               Name
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Guest name"
-                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") void handleGuestAction("add"); }} autoFocus />
+              <input
+                type="text"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="Jane Doe"
+                style={{ ...inputSt, marginTop: 4 }}
+                autoFocus
+              />
             </label>
-            <label style={{ flex: "1 1 200px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
+            <label style={{ flex: "1 1 220px", fontSize: "var(--font-sm)", fontWeight: 600 }}>
               Email
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@example.com"
-                style={{ ...inputSt, marginTop: 4 }} onKeyDown={(e) => { if (e.key === "Enter") void handleGuestAction("add"); }} />
+              <input
+                type="email"
+                value={guestEmail}
+                onChange={(e) => setGuestEmail(e.target.value)}
+                placeholder="jane@gmail.com"
+                style={{ ...inputSt, marginTop: 4 }}
+                onKeyDown={(e) => { if (e.key === "Enter") void handleAddGuest(); }}
+              />
             </label>
             <div className="flex gap-2" style={{ paddingBottom: 1 }}>
               <button
-                onClick={() => void handleGuestAction("add")}
-                disabled={inviteLoading}
-                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", color: "var(--color-text)", fontWeight: 600, cursor: inviteLoading ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: inviteLoading ? 0.7 : 1 }}
+                onClick={() => void handleAddGuest()}
+                disabled={addLoading || !guestName.trim() || !guestEmail.trim()}
+                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: (addLoading || !guestName.trim() || !guestEmail.trim()) ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: (addLoading || !guestName.trim() || !guestEmail.trim()) ? 0.6 : 1 }}
               >
-                {inviteLoading ? "Saving..." : "Add Only"}
+                {addLoading ? "Adding..." : "Add Guest"}
               </button>
-              <button
-                onClick={() => void handleGuestAction("invite")}
-                disabled={inviteLoading}
-                style={{ padding: "6px 18px", borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", border: "none", fontWeight: 600, cursor: inviteLoading ? "not-allowed" : "pointer", fontSize: "var(--font-sm)", opacity: inviteLoading ? 0.7 : 1 }}
-              >
-                {inviteLoading ? "Sending..." : "Add + Invite"}
-              </button>
-              <button onClick={() => setShowInviteForm(false)} style={{ padding: "6px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}>Cancel</button>
+              <button onClick={() => setShowAddForm(false)} style={{ padding: "6px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", cursor: "pointer", fontSize: "var(--font-sm)" }}>Cancel</button>
             </div>
           </div>
           <p style={{ marginTop: 10, color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
-            Add only keeps them admin-managed. Add + Invite sends a magic link so they can claim and edit their own profile.
+            When this person signs in with the same email, they will automatically gain access to the trip.
           </p>
-          {inviteMessage ? <p style={{ marginTop: 10, color: "#15803d", fontSize: "var(--font-sm)" }}>{inviteMessage}</p> : null}
-          {inviteError ? <p style={{ marginTop: 10, color: "#dc2626", fontSize: "var(--font-sm)" }}>{inviteError}</p> : null}
+          {addError && <p style={{ marginTop: 10, color: "#dc2626", fontSize: "var(--font-sm)" }}>{addError}</p>}
         </div>
       )}
 
       {/* Table */}
       {memberships.length === 0 ? (
-        <EmptyState message="No guests yet" actionLabel="Invite your first guest" onAction={() => setShowInviteForm(true)} />
+        <EmptyState message="No guests yet" actionLabel="Add your first guest" onAction={() => setShowAddForm(true)} />
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--color-bg-surface)" }}>
@@ -456,7 +444,7 @@ export function GuestsView() {
                 <th style={headCellSt}>Guest</th>
                 <th style={headCellSt}>Email</th>
                 <th style={headCellSt}>Role</th>
-                <th style={headCellSt}>RSVP</th>
+                <th style={headCellSt}>Status</th>
                 {guestFieldSchema.map((f) => (
                   <th key={f.id} style={headCellSt}>{f.label}</th>
                 ))}
@@ -475,10 +463,14 @@ export function GuestsView() {
                     fieldSchema={guestFieldSchema}
                     colSpan={colSpan}
                     onStatusChange={(status) => updateMembershipStatus(m.userId, status)}
-                    onSave={({ name, email, role, inviteStatus, customFields }) => {
+                    onDelete={() => {
+                      void deleteGuest(m.userId);
+                    }}
+                    canDelete={isAdmin && m.userId !== currentUserId}
+                    onSave={({ name, email, role, accountStatus, customFields }) => {
                       updateUser(m.userId, { name, email, customFields });
                       updateMemberRole(m.userId, role);
-                      updateMembershipStatus(m.userId, inviteStatus);
+                      updateMembershipStatus(m.userId, accountStatus);
                     }}
                   />
                 );
@@ -490,4 +482,3 @@ export function GuestsView() {
     </div>
   );
 }
-
