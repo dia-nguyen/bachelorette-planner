@@ -35,6 +35,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -648,6 +649,22 @@ export function AppProvider({ children }: { children: ReactNode; }) {
     const m = memberships.find((mb) => mb.userId === effectiveCurrentUserId);
     return m?.role ?? "GUEST_CONFIRMED";
   }, [memberships, effectiveCurrentUserId]);
+  const moodboardRequestChainsRef = useRef(new Map<string, Promise<void>>());
+
+  const queueMoodboardRequest = useCallback(
+    (noteId: string, request: () => Promise<void>) => {
+      const previous = moodboardRequestChainsRef.current.get(noteId) ?? Promise.resolve();
+      const next = previous.catch(() => undefined).then(request);
+      moodboardRequestChainsRef.current.set(noteId, next);
+      void next.finally(() => {
+        if (moodboardRequestChainsRef.current.get(noteId) === next) {
+          moodboardRequestChainsRef.current.delete(noteId);
+        }
+      });
+      return next;
+    },
+    [],
+  );
 
   // Dashboard aggregation (memoized)
   const dashboard = useMemo(() => {
@@ -1168,15 +1185,20 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         const id = uuid();
         const newNote: MoodboardNote = { ...data, id, tripId: activeTripId };
         setSupabaseMoodboardNotes((prev) => [...prev, newNote]);
-        void fetch(`/api/trips/${activeTripId}/moodboard`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...data, id }),
-        }).then(async (res) => {
+        void queueMoodboardRequest(id, async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/moodboard`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...data, id }),
+          });
+          const payload = (await res.json()) as MoodboardNote & { error?: string; };
           if (!res.ok) {
-            const payload = (await res.json()) as { error?: string; };
             throw new Error(payload.error ?? "Failed to create moodboard note.");
           }
+
+          setSupabaseMoodboardNotes((prev) =>
+            prev.map((note) => (note.id === id ? { ...note, ...payload } : note)),
+          );
         }).catch((error) => {
           console.error("[AppContext] Failed to create moodboard note:", error);
           setSupabaseMoodboardNotes((prev) => prev.filter((note) => note.id !== id));
@@ -1185,7 +1207,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       }
       repo.addMoodboardNote({ ...data, id: uuid(), tripId: effectiveTripId });
     },
-    [activeTripId, effectiveTripId, isSupabaseMode]
+    [activeTripId, effectiveTripId, isSupabaseMode, queueMoodboardRequest]
   );
   const updateMoodboardNote = useCallback(
     (id: string, patch: Partial<MoodboardNote>) => {
@@ -1193,10 +1215,16 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         setSupabaseMoodboardNotes((prev) =>
           prev.map((note) => note.id === id ? { ...note, ...patch } : note)
         );
-        void fetch(`/api/trips/${activeTripId}/moodboard`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, patch }),
+        void queueMoodboardRequest(id, async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/moodboard`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, patch }),
+          });
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string; };
+            throw new Error(payload.error ?? "Failed to update moodboard note.");
+          }
         }).catch((error) => {
           console.error("[AppContext] Failed to update moodboard note:", error);
           refresh();
@@ -1205,18 +1233,19 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       }
       repo.updateMoodboardNote(id, patch);
     },
-    [activeTripId, isSupabaseMode, refresh]
+    [activeTripId, isSupabaseMode, queueMoodboardRequest, refresh]
   );
   const deleteMoodboardNote = useCallback(
     (id: string) => {
       if (isSupabaseMode && activeTripId) {
         const previousNotes = supabaseMoodboardNotes;
         setSupabaseMoodboardNotes((prev) => prev.filter((note) => note.id !== id));
-        void fetch(`/api/trips/${activeTripId}/moodboard`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        }).then(async (res) => {
+        void queueMoodboardRequest(id, async () => {
+          const res = await fetch(`/api/trips/${activeTripId}/moodboard`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
           if (!res.ok) {
             const payload = (await res.json()) as { error?: string; };
             throw new Error(payload.error ?? "Failed to delete moodboard note.");
@@ -1229,7 +1258,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       }
       repo.deleteMoodboardNote(id);
     },
-    [activeTripId, isSupabaseMode, supabaseMoodboardNotes]
+    [activeTripId, isSupabaseMode, queueMoodboardRequest, supabaseMoodboardNotes]
   );
   const setMoodboardNotes = useCallback(
     (notes: MoodboardNote[]) => {
