@@ -570,7 +570,7 @@ export function AppShell() {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(760px, 96vw)",
-              maxHeight: "92vh",
+              maxHeight: "92dvh",
               overflow: "hidden",
               borderRadius: "var(--radius-lg)",
             }}

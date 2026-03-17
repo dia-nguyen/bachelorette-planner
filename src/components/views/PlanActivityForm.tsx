@@ -149,19 +149,15 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
     <Card
       style={{
         padding: 0,
-        maxHeight: "92vh",
-        overflowY: "auto",
+        maxHeight: "92dvh",
+        overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        WebkitOverflowScrolling: "touch",
       }}
     >
       <div
         className="flex items-center justify-between"
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 2,
           background: "var(--color-bg-surface)",
           borderBottom: "1px solid var(--color-border)",
           padding: "14px 18px",
@@ -173,7 +169,15 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
         <button onClick={onClose} style={closeBtnStyle}>✕</button>
       </div>
 
-      <div style={{ padding: "16px 18px 12px", flex: 1, minHeight: 0 }}>
+      <div
+        style={{
+          padding: "16px 18px",
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 16 }}>
           Describe what you&apos;re planning, then toggle which pieces to track. Everything gets linked automatically.
         </p>
@@ -501,12 +505,9 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
       <div
         className="flex items-center justify-between"
         style={{
-          position: "sticky",
-          bottom: 0,
-          zIndex: 2,
           background: "var(--color-bg-surface)",
           borderTop: "1px solid var(--color-border)",
-          padding: "12px 18px",
+          padding: "12px 18px calc(12px + env(safe-area-inset-bottom))",
         }}
       >
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>

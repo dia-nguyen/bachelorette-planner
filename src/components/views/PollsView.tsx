@@ -319,9 +319,6 @@ export function PollsView() {
             <div
               className="flex items-center justify-between"
               style={{
-                position: "sticky",
-                top: 0,
-                zIndex: 2,
                 background: "var(--color-bg-surface)",
                 borderBottom: "1px solid var(--color-border)",
                 padding: "14px 18px",
@@ -465,12 +462,9 @@ export function PollsView() {
             <div
               className="flex items-center justify-end gap-2"
               style={{
-                position: "sticky",
-                bottom: 0,
-                zIndex: 2,
                 background: "var(--color-bg-surface)",
                 borderTop: "1px solid var(--color-border)",
-                padding: "12px 18px",
+                padding: "12px 18px calc(12px + env(safe-area-inset-bottom))",
               }}
             >
               <button
