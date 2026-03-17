@@ -9,6 +9,115 @@ interface StubUserRow {
   custom_fields: Record<string, string> | null;
 }
 
+// Transfer memberships from a stub user to the real user, then delete the stub.
+// Handles the case where the real user already has a membership in the same trip
+// (e.g. from a previous partial merge) by deleting the conflicting stub membership
+// instead of transferring it.
+async function mergeStubIntoUser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  stubId: string,
+  realUserId: string,
+): Promise<void> {
+  const { data: stubMemberships } = await admin
+    .from("memberships")
+    .select("id, trip_id")
+    .eq("user_id", stubId);
+
+  if (stubMemberships && stubMemberships.length > 0) {
+    // Find trips where the real user already has a membership (unique constraint conflict).
+    const tripIds = stubMemberships.map((m: { trip_id: string }) => m.trip_id);
+    const { data: existing } = await admin
+      .from("memberships")
+      .select("trip_id")
+      .eq("user_id", realUserId)
+      .in("trip_id", tripIds);
+
+    const existingTripIds = new Set(
+      (existing ?? []).map((m: { trip_id: string }) => m.trip_id),
+    );
+
+    // Memberships where real user already exists — just delete the stub's copy.
+    const conflictIds = stubMemberships
+      .filter((m: { trip_id: string }) => existingTripIds.has(m.trip_id))
+      .map((m: { id: string }) => m.id);
+    if (conflictIds.length > 0) {
+      const { error } = await admin.from("memberships").delete().in("id", conflictIds);
+      if (error) {
+        console.error("[auth/callback] Failed to delete conflicting stub memberships:", error.message);
+      }
+    }
+
+    // Remaining memberships — transfer to real user and mark CLAIMED.
+    const transferIds = stubMemberships
+      .filter((m: { trip_id: string }) => !existingTripIds.has(m.trip_id))
+      .map((m: { id: string }) => m.id);
+    if (transferIds.length > 0) {
+      const { error } = await admin
+        .from("memberships")
+        .update({ user_id: realUserId, account_status: "CLAIMED" })
+        .in("id", transferIds);
+      if (error) {
+        console.error("[auth/callback] Failed to transfer memberships from stub:", error.message);
+      }
+    }
+  }
+
+  // Delete stub user row. Don't return early on failure — log and continue so the
+  // user's login is not blocked by a cleanup error.
+  const { error: deleteRowError } = await admin.from("users").delete().eq("id", stubId);
+  if (deleteRowError) {
+    console.error("[auth/callback] Failed to delete stub user row:", deleteRowError.message);
+    return;
+  }
+
+  const { error: deleteAuthError } = await admin.auth.admin.deleteUser(stubId);
+  if (deleteAuthError) {
+    console.error("[auth/callback] Failed to delete stub auth user:", deleteAuthError.message);
+  }
+}
+
+// Find and clean up any previously-orphaned stubs (email = merged-*@placeholder.internal)
+// that share a trip with the given user. These are leftovers from a prior partial merge.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function cleanOrphanedStubs(admin: any, userId: string): Promise<void> {
+  const { data: userMemberships } = await admin
+    .from("memberships")
+    .select("trip_id")
+    .eq("user_id", userId);
+
+  if (!userMemberships || userMemberships.length === 0) return;
+
+  const tripIds = userMemberships.map((m: { trip_id: string }) => m.trip_id);
+
+  // Find memberships in those trips belonging to OTHER users.
+  const { data: siblingMemberships } = await admin
+    .from("memberships")
+    .select("id, user_id")
+    .in("trip_id", tripIds)
+    .neq("user_id", userId);
+
+  if (!siblingMemberships || siblingMemberships.length === 0) return;
+
+  const otherUserIds = [...new Set(siblingMemberships.map((m: { user_id: string }) => m.user_id))];
+
+  // Filter to only those with a placeholder email (orphaned stubs).
+  const { data: orphans } = await admin
+    .from("users")
+    .select("id")
+    .in("id", otherUserIds)
+    .like("email", "merged-%@placeholder.internal");
+
+  if (!orphans || orphans.length === 0) return;
+
+  for (const orphan of orphans as { id: string }[]) {
+    console.error(`[auth/callback] Cleaning up orphaned stub ${orphan.id}`);
+    await admin.from("memberships").delete().eq("user_id", orphan.id);
+    await admin.from("users").delete().eq("id", orphan.id);
+    await admin.auth.admin.deleteUser(orphan.id);
+  }
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
@@ -91,42 +200,12 @@ export async function GET(request: Request) {
     }
 
     if (stubUser) {
-        // Transfer all memberships from stub → real user
-        const { error: transferError } = await admin
-          .from("memberships")
-          .update({ user_id: user.id, account_status: "CLAIMED" })
-          .eq("user_id", stubUser.id);
-
-        if (transferError) {
-          console.error(
-            "[auth/callback] Failed to transfer memberships from stub user:",
-            transferError.message,
-          );
-          return NextResponse.redirect(new URL(next, request.url));
-        }
-
-        // Delete stub user row and stub auth user
-        const { error: deleteUserRowError } = await admin
-          .from("users")
-          .delete()
-          .eq("id", stubUser.id);
-
-        if (deleteUserRowError) {
-          console.error(
-            "[auth/callback] Failed to delete stub user row after transfer:",
-            deleteUserRowError.message,
-          );
-          return NextResponse.redirect(new URL(next, request.url));
-        }
-
-        const { error: deleteAuthUserError } = await admin.auth.admin.deleteUser(stubUser.id);
-        if (deleteAuthUserError) {
-          console.error(
-            "[auth/callback] Failed to delete stub auth user after transfer:",
-            deleteAuthUserError.message,
-          );
-        }
+        await mergeStubIntoUser(admin, stubUser.id, user.id);
     }
+
+    // Clean up any previously-orphaned stubs (merged-*@placeholder.internal) in the
+    // same trips as this user. These are left over from a partially-completed prior merge.
+    await cleanOrphanedStubs(admin, user.id);
 
     // Ensure invited users are auto-claimed as soon as they complete login.
     const { error: claimError } = await admin
