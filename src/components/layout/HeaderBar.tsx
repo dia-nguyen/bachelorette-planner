@@ -59,7 +59,16 @@ export function HeaderBar({
 
       <div className="flex items-center gap-2">
         {onAddItem && (
-          <ActionButton icon={<HiOutlinePlus size={16} />} label="Add Item" onClick={onAddItem} />
+          <ActionButton
+            icon={<HiOutlinePlus size={16} />}
+            label={(
+              <>
+                <span className="sm:hidden">Add</span>
+                <span className="hidden sm:inline">Add Item</span>
+              </>
+            )}
+            onClick={onAddItem}
+          />
         )}
 
         {/* More menu */}
@@ -171,7 +180,7 @@ function ActionButton({
   onClick,
 }: {
   icon: React.ReactNode;
-  label: string;
+  label: React.ReactNode;
   onClick?: () => void;
 }) {
   return (

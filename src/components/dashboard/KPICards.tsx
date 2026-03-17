@@ -11,7 +11,7 @@ interface KPICardsProps {
 
 export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
       {/* Days Until Trip */}
       <Card>
         <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 4 }}>
