@@ -50,13 +50,12 @@ export function MultiSelectFilter({
   }, [isOpen]);
 
   const toggleAll = () => {
-    onChange(optionValues);
+    onChange(isAllSelected ? [] : optionValues);
   };
 
   const toggleOne = (value: string) => {
     if (selectedSet.has(value)) {
-      const next = selectedValues.filter((v) => v !== value);
-      onChange(next.length === 0 ? [value] : next);
+      onChange(selectedValues.filter((v) => v !== value));
       return;
     }
     onChange([...selectedValues, value]);

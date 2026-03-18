@@ -35,7 +35,12 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
     .filter((t) => t.status !== "DONE")
     .sort((a, b) => {
       const prioOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-      return prioOrder[a.priority] - prioOrder[b.priority];
+      const priorityDiff = prioOrder[a.priority] - prioOrder[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
+      const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
+      return aDue - bDue;
     });
 
   return (
