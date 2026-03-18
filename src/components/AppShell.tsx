@@ -475,6 +475,7 @@ export function AppShell() {
         onTabChange={setActiveTab}
         onNewTrip={() => setShowCreateTrip(true)}
         onSignOut={!auth.isDemo ? handleSignOut : undefined}
+        isMobile={isMobile}
       />
 
       {/* Main content */}
@@ -486,11 +487,15 @@ export function AppShell() {
           onRestoreDemo={app.resetDemoData}
           onExportJSON={app.exportData}
           onImportJSON={app.importData}
+          onSignOut={!auth.isDemo ? handleSignOut : undefined}
         />
 
         <main
-          className={`flex-1 overflow-y-auto ${activeTab === "moodboard" ? "p-0" : "p-3 md:p-6"}`}
-          style={{ background: "var(--color-bg-surface)" }}
+          className={`flex-1 overflow-y-auto ${activeTab === "moodboard" ? "p-0" : "p-2 sm:p-3 md:p-6"}`}
+          style={{
+            background: "var(--color-bg-surface)",
+            paddingBottom: isMobile && activeTab !== "moodboard" ? "calc(74px + env(safe-area-inset-bottom))" : undefined,
+          }}
         >
           {showLoadingState ? (
             <LoadingState />

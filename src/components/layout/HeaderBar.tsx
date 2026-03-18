@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { HiOutlinePlus, HiTrash } from "react-icons/hi";
+import { HiOutlineLogout, HiOutlinePlus, HiTrash } from "react-icons/hi";
 
 interface HeaderBarProps {
   title: string;
@@ -59,16 +59,37 @@ export function HeaderBar({
 
       <div className="flex items-center gap-2">
         {onAddItem && (
-          <ActionButton
-            icon={<HiOutlinePlus size={16} />}
-            label={(
-              <>
-                <span className="sm:hidden">Add</span>
-                <span className="hidden sm:inline">Add Item</span>
-              </>
-            )}
-            onClick={onAddItem}
-          />
+          <div className="hidden md:block">
+            <ActionButton
+              icon={<HiOutlinePlus size={16} />}
+              label={(
+                <>
+                  <span className="sm:hidden">Add</span>
+                  <span className="hidden sm:inline">Add Item</span>
+                </>
+              )}
+              onClick={onAddItem}
+            />
+          </div>
+        )}
+
+        {onSignOut && (
+          <button
+            onClick={onSignOut}
+            className="md:hidden flex items-center gap-1 px-3 transition-colors"
+            style={{
+              height: 36,
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-surface)",
+              color: "var(--color-text-primary)",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            <HiOutlineLogout size={16} />
+            <span>Log out</span>
+          </button>
         )}
 
         {/* More menu */}

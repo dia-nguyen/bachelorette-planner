@@ -13,12 +13,12 @@ export function DashboardView() {
   const { dashboard, tasks, users, openPanel } = useApp();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3 md:gap-6">
       {/* Top row: KPIs */}
       <KPICards kpis={dashboard.kpis} tasksSummary={dashboard.allTasksSummary} />
 
       {/* Middle row: Next Up + Budget Snapshot */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         <NextUp
           events={dashboard.nextUp}
           onEventClick={(id) => openPanel("event", id)}
@@ -31,7 +31,7 @@ export function DashboardView() {
       </div>
 
       {/* Bottom row: Tasks + Payments */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         <OpenTasks
           tasks={tasks}
           summary={dashboard.allTasksSummary}

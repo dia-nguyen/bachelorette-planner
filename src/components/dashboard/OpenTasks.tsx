@@ -34,11 +34,6 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
     <Card>
       <div className="flex items-center justify-between mb-3">
         <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 600 }}>Open Tasks</h3>
-        <div className="flex gap-3" style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-          <span>Urgent {summary.urgent}</span>
-          <span>In Progress {summary.inProgress}</span>
-          <span>Done {summary.done}</span>
-        </div>
       </div>
 
       {openTasks.length === 0 ? (

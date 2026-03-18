@@ -40,12 +40,163 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
   onNewTrip?: () => void;
   onSignOut?: () => void;
+  isMobile?: boolean;
 }
 
-export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile = false }: SidebarProps) {
   const { trip, availableTrips, switchTrip } = useApp();
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
+
+  if (isMobile) {
+    const primaryMobileItems: NavItem[] = navItems.filter((item) =>
+      ["dashboard", "tasks", "events", "budget"].includes(item.id),
+    );
+    const moreMobileItems: NavItem[] = [
+      ...navItems.filter((item) =>
+        ["itinerary", "polls", "moodboard", "guests"].includes(item.id),
+      ),
+      { icon: <HiOutlineCog size={20} />, label: "Settings", id: "settings" },
+    ];
+    const isMoreActive = !primaryMobileItems.some((item) => item.id === activeTab);
+
+    return (
+      <>
+        {moreOpen && (
+          <div
+            onClick={() => setMoreOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 260,
+              background: "rgba(0,0,0,0.28)",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: "var(--color-bg-surface)",
+                borderTopLeftRadius: "16px",
+                borderTopRightRadius: "16px",
+                borderTop: "1px solid var(--color-border)",
+                boxShadow: "0 -10px 30px rgba(0,0,0,0.18)",
+                padding: "10px 12px calc(14px + env(safe-area-inset-bottom))",
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 4,
+                  borderRadius: 999,
+                  background: "var(--color-border)",
+                  margin: "0 auto 10px",
+                }}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                {moreMobileItems.map((item) => {
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        onTabChange(item.id);
+                        setMoreOpen(false);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        height: 42,
+                        borderRadius: "var(--radius-md)",
+                        border: "1px solid var(--color-border)",
+                        background: isActive ? "var(--color-accent-soft)" : "var(--color-bg-surface)",
+                        color: isActive ? "var(--color-accent)" : "var(--color-text-primary)",
+                        padding: "0 10px",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <nav
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 140,
+            background: "var(--color-bg-surface)",
+            borderTop: "1px solid var(--color-border)",
+            paddingBottom: "max(8px, env(safe-area-inset-bottom))",
+            paddingTop: 6,
+          }}
+        >
+          <div className="grid grid-cols-5 gap-1" style={{ padding: "0 8px" }}>
+            {primaryMobileItems.map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onTabChange(item.id)}
+                  style={{
+                    minWidth: 0,
+                    height: 52,
+                    borderRadius: "var(--radius-md)",
+                    border: "none",
+                    background: isActive ? "var(--color-accent-soft)" : "transparent",
+                    color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 2,
+                    cursor: "pointer",
+                  }}
+                >
+                  {item.icon}
+                  <span style={{ fontSize: 11, lineHeight: 1.1 }}>{item.label}</span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setMoreOpen((open) => !open)}
+              style={{
+                minWidth: 0,
+                height: 52,
+                borderRadius: "var(--radius-md)",
+                border: "none",
+                background: isMoreActive || moreOpen ? "var(--color-accent-soft)" : "transparent",
+                color: isMoreActive || moreOpen ? "var(--color-accent)" : "var(--color-text-secondary)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 2,
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ fontSize: 18, lineHeight: 1 }}>⋯</span>
+              <span style={{ fontSize: 11, lineHeight: 1.1 }}>More</span>
+            </button>
+          </div>
+        </nav>
+      </>
+    );
+  }
 
   return (
     <nav
@@ -55,8 +206,8 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: Sideba
         background: "var(--color-bg-surface)",
         borderRight: "1px solid var(--color-border)",
         position: "relative",
-        overflowX: "visible",
-        overflowY: "auto",
+        overflow: "visible",
+        zIndex: 120,
         paddingBottom: "max(12px, env(safe-area-inset-bottom))",
       }}
     >
@@ -160,65 +311,142 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut }: Sideba
       {navItems.map((item) => {
         const isActive = activeTab === item.id;
         return (
-          <button
-            key={item.id}
-            onClick={() => onTabChange(item.id)}
-            title={item.label}
-            className="flex items-center justify-center transition-colors"
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: "var(--radius-md)",
-              background: isActive ? "var(--color-accent-soft)" : "transparent",
-              color: isActive
-                ? "var(--color-accent)"
-                : "var(--color-text-secondary)",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {item.icon}
-          </button>
+          <div key={item.id} className="group relative">
+            <button
+              onClick={() => onTabChange(item.id)}
+              aria-label={item.label}
+              className="flex items-center justify-center transition-colors"
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "var(--radius-md)",
+                background: isActive ? "var(--color-accent-soft)" : "transparent",
+                color: isActive
+                  ? "var(--color-accent)"
+                  : "var(--color-text-secondary)",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {item.icon}
+            </button>
+            <span
+              role="tooltip"
+              style={{
+                position: "absolute",
+                left: "calc(100% + 8px)",
+                top: "50%",
+                transform: "translateY(-50%)",
+                padding: "4px 8px",
+                borderRadius: "8px",
+                background: "var(--color-text-primary)",
+                color: "var(--color-bg-surface)",
+                fontSize: 12,
+                fontWeight: 600,
+                lineHeight: 1.2,
+                whiteSpace: "nowrap",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.16)",
+                pointerEvents: "none",
+                transition: "opacity 120ms ease",
+                zIndex: 220,
+              }}
+              className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+            >
+              {item.label}
+            </span>
+          </div>
         );
       })}
 
       <div className="flex-1" />
 
       {/* Settings */}
-      <button
-        title="Settings"
-        onClick={() => onTabChange("settings")}
-        className="flex items-center justify-center transition-colors"
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: "var(--radius-md)",
-          background: activeTab === "settings" ? "var(--color-accent-soft)" : "transparent",
-          color: activeTab === "settings" ? "var(--color-accent)" : "var(--color-text-secondary)",
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
-        <HiOutlineCog size={22} />
-      </button>
-
-      {onSignOut && (
+      <div className="group relative">
         <button
-          title="Log Out"
-          onClick={onSignOut}
+          aria-label="Settings"
+          onClick={() => onTabChange("settings")}
           className="flex items-center justify-center transition-colors"
           style={{
             width: 44,
             height: 44,
             borderRadius: "var(--radius-md)",
-            background: "transparent",
-            color: "var(--color-text-secondary)",
+            background: activeTab === "settings" ? "var(--color-accent-soft)" : "transparent",
+            color: activeTab === "settings" ? "var(--color-accent)" : "var(--color-text-secondary)",
             border: "none",
             cursor: "pointer",
           }}
         >
-          <HiOutlineLogout size={22} />
+          <HiOutlineCog size={22} />
         </button>
+        <span
+          role="tooltip"
+          style={{
+            position: "absolute",
+            left: "calc(100% + 8px)",
+            top: "50%",
+            transform: "translateY(-50%)",
+            padding: "4px 8px",
+            borderRadius: "8px",
+            background: "var(--color-text-primary)",
+            color: "var(--color-bg-surface)",
+            fontSize: 12,
+            fontWeight: 600,
+            lineHeight: 1.2,
+            whiteSpace: "nowrap",
+            boxShadow: "0 6px 18px rgba(0,0,0,0.16)",
+            pointerEvents: "none",
+            transition: "opacity 120ms ease",
+            zIndex: 220,
+          }}
+          className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+        >
+          Settings
+        </span>
+      </div>
+
+      {onSignOut && (
+        <div className="group relative">
+          <button
+            aria-label="Log Out"
+            onClick={onSignOut}
+            className="flex items-center justify-center transition-colors"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "var(--radius-md)",
+              background: "transparent",
+              color: "var(--color-text-secondary)",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            <HiOutlineLogout size={22} />
+          </button>
+          <span
+            role="tooltip"
+            style={{
+              position: "absolute",
+              left: "calc(100% + 8px)",
+              top: "50%",
+              transform: "translateY(-50%)",
+              padding: "4px 8px",
+              borderRadius: "8px",
+              background: "var(--color-text-primary)",
+              color: "var(--color-bg-surface)",
+              fontSize: 12,
+              fontWeight: 600,
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+              boxShadow: "0 6px 18px rgba(0,0,0,0.16)",
+              pointerEvents: "none",
+              transition: "opacity 120ms ease",
+              zIndex: 220,
+            }}
+            className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+          >
+            Log Out
+          </span>
+        </div>
       )}
     </nav>
   );
