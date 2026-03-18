@@ -141,7 +141,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
             zIndex: 140,
             background: "var(--color-bg-surface)",
             borderTop: "none",
-            paddingBottom: "env(safe-area-inset-bottom)",
+            paddingBottom: 0,
             paddingTop: 0,
           }}
         >
@@ -154,7 +154,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
                   onClick={() => onTabChange(item.id)}
                   style={{
                     minWidth: 0,
-                    height: 58,
+                    height: "calc(58px + env(safe-area-inset-bottom))",
                     borderRadius: 0,
                     border: "none",
                     background: isActive ? "var(--color-accent-soft)" : "transparent",
@@ -176,7 +176,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
               onClick={() => setMoreOpen((open) => !open)}
               style={{
                 minWidth: 0,
-                height: 58,
+                height: "calc(58px + env(safe-area-inset-bottom))",
                 borderRadius: 0,
                 border: "none",
                 background: isMoreActive || moreOpen ? "var(--color-accent-soft)" : "transparent",
