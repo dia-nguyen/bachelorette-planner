@@ -131,13 +131,18 @@ export function PollsView() {
     () => [...polls].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [polls],
   );
+  const validUserIds = useMemo(() => new Set(users.map((user) => user.id)), [users]);
+  const normalizedRequiredUserIds = useMemo(
+    () => Array.from(new Set(requiredUserIds.filter((id) => validUserIds.has(id)))),
+    [requiredUserIds, validUserIds],
+  );
   const selectedResponders = useMemo(
-    () => users.filter((user) => requiredUserIds.includes(user.id)),
-    [users, requiredUserIds],
+    () => users.filter((user) => normalizedRequiredUserIds.includes(user.id)),
+    [users, normalizedRequiredUserIds],
   );
   const availableResponders = useMemo(
-    () => users.filter((user) => !requiredUserIds.includes(user.id)),
-    [users, requiredUserIds],
+    () => users.filter((user) => !normalizedRequiredUserIds.includes(user.id)),
+    [users, normalizedRequiredUserIds],
   );
   const hasInvalidPrice = options.some((option) => {
     const parsed = parsePriceInput(option.pricePerPerson);
@@ -184,7 +189,9 @@ export function PollsView() {
       : 1;
     setVoteLimitMode(existingMaxVotesPerUser > 1 ? "multiple" : "single");
     setMaxVotesInput(existingMaxVotesPerUser > 1 ? String(existingMaxVotesPerUser) : "2");
-    setRequiredUserIds([...poll.requiredUserIds]);
+    setRequiredUserIds(
+      Array.from(new Set(poll.requiredUserIds.filter((id) => validUserIds.has(id)))),
+    );
     setOptions(
       poll.options.map((option) => ({
         id: option.id,
@@ -223,7 +230,7 @@ export function PollsView() {
       isPublished,
       maxVotesPerUser,
       visibility,
-      requiredUserIds,
+      requiredUserIds: normalizedRequiredUserIds,
       createdAt: new Date().toISOString(),
     });
 
@@ -260,7 +267,7 @@ export function PollsView() {
       options: cleanOptions,
       maxVotesPerUser,
       visibility,
-      requiredUserIds,
+      requiredUserIds: normalizedRequiredUserIds,
     });
     closePollModal();
   };
@@ -317,9 +324,12 @@ export function PollsView() {
             const pollMaxVotes = Number.isFinite(poll.maxVotesPerUser)
               ? Math.max(1, Math.floor(poll.maxVotesPerUser))
               : 1;
-            const requiredSet = new Set(poll.requiredUserIds);
+            const validRequiredUserIds = Array.from(
+              new Set(poll.requiredUserIds.filter((userId) => validUserIds.has(userId))),
+            );
+            const requiredSet = new Set(validRequiredUserIds);
             const requiredCount = requiredSet.size;
-            const requiredDone = poll.requiredUserIds.filter((userId) => didUserVote(poll, userId)).length;
+            const requiredDone = validRequiredUserIds.filter((userId) => didUserVote(poll, userId)).length;
             const isCurrentUserRequired = requiredSet.has(currentUserId);
             const creator = users.find((u) => u.id === poll.createdByUserId);
 
