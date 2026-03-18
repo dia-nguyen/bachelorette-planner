@@ -2,7 +2,8 @@
 
 import { Avatar, Card } from "@/components/ui";
 import { useApp } from "@/lib/context";
-import type { BudgetCategory, BudgetItemStatus, CostSplitType, EventStatus, TaskPriority, TaskStatus } from "@/lib/data";
+import type { BudgetCategory, BudgetItemStatus, CostSplitType, EventStatus, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/data";
+import { formatBudgetLabel } from "@/lib/domain";
 import { useState } from "react";
 import { BsCalendarDate } from "react-icons/bs";
 import { IoIosCheckboxOutline } from "react-icons/io";
@@ -53,6 +54,8 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
   const [taskPriority, setTaskPriority] = useState<TaskPriority>("MEDIUM");
   const [taskStatus, setTaskStatus] = useState<TaskStatus>("TODO");
   const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskSubtasks, setTaskSubtasks] = useState<TaskSubtask[]>([]);
+  const [newTaskSubtaskTitle, setNewTaskSubtaskTitle] = useState("");
 
   // Budget fields
   const [budgetCategory, setBudgetCategory] = useState<BudgetCategory>("MISC");
@@ -73,6 +76,20 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
         ? prev.filter((id) => id !== userId)
         : [...prev, userId]
     );
+  };
+
+  const addTaskSubtask = () => {
+    const title = newTaskSubtaskTitle.trim();
+    if (!title) return;
+    const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setTaskSubtasks((prev) => [...prev, { id, title, isDone: false }]);
+    setNewTaskSubtaskTitle("");
+  };
+
+  const removeTaskSubtask = (subtaskId: string) => {
+    setTaskSubtasks((prev) => prev.filter((subtask) => subtask.id !== subtaskId));
   };
 
   const handleSubmit = async () => {
@@ -112,6 +129,7 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
         taskPriority,
         taskStatus,
         taskDueAt: taskDueAt ? new Date(taskDueAt).toISOString() : null,
+        taskSubtasks,
         createBudget: wantBudget,
         budgetCategory,
         budgetPlannedAmount: budgetPlannedAmountTotal,
@@ -388,6 +406,65 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
                 <input type="date" value={taskDueAt} onChange={(e) => setTaskDueAt(e.target.value)} style={inputStyle} />
               </label>
             </div>
+
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                <p style={{ ...labelStyle, marginBottom: 0 }}>Subtasks (optional)</p>
+                {taskSubtasks.length > 0 && (
+                  <span style={{ fontSize: "var(--font-xs)", color: "var(--color-text-secondary)" }}>
+                    {taskSubtasks.length} item{taskSubtasks.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+              {taskSubtasks.length > 0 && (
+                <div className="flex flex-col gap-2" style={{ marginBottom: 8 }}>
+                  {taskSubtasks.map((subtask) => (
+                    <div
+                      key={subtask.id}
+                      className="flex items-center justify-between gap-2"
+                      style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-md)",
+                        background: "var(--color-bg-surface)",
+                        padding: "6px 10px",
+                        fontSize: "var(--font-sm)",
+                      }}
+                    >
+                      <span>{subtask.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeTaskSubtask(subtask.id)}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "var(--color-text-secondary)",
+                          cursor: "pointer",
+                          fontSize: "var(--font-sm)",
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTaskSubtaskTitle}
+                  onChange={(e) => setNewTaskSubtaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTaskSubtask();
+                    }
+                  }}
+                  placeholder="Add a subtask..."
+                  style={{ ...inputStyle, marginTop: 0 }}
+                />
+                <button type="button" onClick={addTaskSubtask} style={secondaryBtnStyle}>Add</button>
+              </div>
+            </div>
           </section>
         )}
 
@@ -412,17 +489,17 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
                 Category
                 <select value={budgetCategory} onChange={(e) => setBudgetCategory(e.target.value as BudgetCategory)} style={inputStyle}>
                   {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>{formatBudgetLabel(c)}</option>
                   ))}
                 </select>
               </label>
               <label style={labelStyle}>
                 Status
                 <select value={budgetStatus} onChange={(e) => setBudgetStatus(e.target.value as BudgetItemStatus)} style={inputStyle}>
-                  <option value="PLANNED">Planned</option>
-                  <option value="PURCHASED">Purchased</option>
-                  <option value="REIMBURSED">Reimbursed</option>
-                  <option value="SETTLED">Settled</option>
+                  <option value="PLANNED">{formatBudgetLabel("PLANNED")}</option>
+                  <option value="PURCHASED">{formatBudgetLabel("PURCHASED")}</option>
+                  <option value="REIMBURSED">{formatBudgetLabel("REIMBURSED")}</option>
+                  <option value="SETTLED">{formatBudgetLabel("SETTLED")}</option>
                 </select>
               </label>
               <label style={labelStyle}>

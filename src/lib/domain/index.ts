@@ -9,3 +9,4 @@ export {
   daysToGo,
   formatCurrency,
 } from "./dashboard";
+export { formatBudgetLabel } from "./labels";

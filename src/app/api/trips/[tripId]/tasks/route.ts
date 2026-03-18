@@ -16,6 +16,7 @@ const FIELD_MAP: Record<string, string> = {
   assigneeUserIds: "assignee_user_ids",
   relatedEventId: "related_event_id",
   relatedBudgetItemId: "related_budget_item_id",
+  subtasks: "subtasks",
 };
 
 function toDbPatch(patch: Record<string, unknown>): Record<string, unknown> {

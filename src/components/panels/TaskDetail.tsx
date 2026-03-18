@@ -27,6 +27,13 @@ interface TaskDetailProps {
 const TASK_STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 const TASK_PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
 
+function getCompletionPercentage(task: Task): number {
+  const subtasks = task.subtasks ?? [];
+  if (subtasks.length === 0) return task.status === "DONE" ? 100 : 0;
+  const done = subtasks.filter((s) => s.isDone).length;
+  return Math.round((done / subtasks.length) * 100);
+}
+
 export function TaskDetail({
   task,
   assignees,
@@ -58,6 +65,7 @@ export function TaskDetail({
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [draft, setDraft] = useState(() => toDraft(task));
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
 
   const handleEdit = () => {
     setDraft(toDraft(task));
@@ -87,6 +95,33 @@ export function TaskDetail({
       year: "numeric",
     })
     : "No due date";
+  const subtasks = task.subtasks ?? [];
+  const completionPercent = getCompletionPercentage(task);
+
+  const toggleSubtask = (subtaskId: string) => {
+    onUpdate({
+      subtasks: subtasks.map((subtask) =>
+        subtask.id === subtaskId ? { ...subtask, isDone: !subtask.isDone } : subtask),
+    });
+  };
+
+  const removeSubtask = (subtaskId: string) => {
+    onUpdate({
+      subtasks: subtasks.filter((subtask) => subtask.id !== subtaskId),
+    });
+  };
+
+  const addSubtask = () => {
+    const title = newSubtaskTitle.trim();
+    if (!title) return;
+    const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    onUpdate({
+      subtasks: [...subtasks, { id, title, isDone: false }],
+    });
+    setNewSubtaskTitle("");
+  };
 
   // ---- EDIT MODE ----
   if (editing) {
@@ -239,6 +274,7 @@ export function TaskDetail({
               <Badge variant={task.priority === "HIGH" ? "negative" : task.priority === "MEDIUM" ? "warning" : "neutral"}>
                 {task.priority}
               </Badge>
+              {subtasks.length > 0 && <Badge variant="accent">{completionPercent}% complete</Badge>}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -275,6 +311,98 @@ export function TaskDetail({
           <p style={{ color: "var(--color-text-secondary)", lineHeight: 1.5, whiteSpace: "pre-line", wordBreak: "break-word" }}>
             {task.description || "No description."}
           </p>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between" style={{ marginBottom: subtasks.length > 0 ? 8 : 0 }}>
+            <p style={{ fontWeight: 600 }}>Subtasks</p>
+            {subtasks.length > 0 && (
+              <span style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
+                {completionPercent}% complete
+              </span>
+            )}
+          </div>
+          {subtasks.length > 0 && (
+            <div style={{ height: 8, borderRadius: 999, background: "var(--color-bg-muted)", overflow: "hidden", marginBottom: 10 }}>
+              <div
+                style={{
+                  width: `${completionPercent}%`,
+                  height: "100%",
+                  background: "var(--color-accent)",
+                  transition: "width 0.2s ease",
+                }}
+              />
+            </div>
+          )}
+
+          {subtasks.length === 0 ? (
+            <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", marginBottom: 10 }}>
+              No subtasks yet.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2" style={{ marginBottom: 10 }}>
+              {subtasks.map((subtask) => (
+                <div
+                  key={subtask.id}
+                  className="flex items-center gap-2"
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-border)",
+                    background: "var(--color-bg-surface)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={subtask.isDone}
+                    onChange={() => toggleSubtask(subtask.id)}
+                    aria-label={`Toggle subtask ${subtask.title}`}
+                  />
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: "var(--font-sm)",
+                      color: subtask.isDone ? "var(--color-text-secondary)" : "var(--color-text-primary)",
+                      textDecoration: subtask.isDone ? "line-through" : "none",
+                    }}
+                  >
+                    {subtask.title}
+                  </span>
+                  <button
+                    onClick={() => removeSubtask(subtask.id)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--color-text-secondary)",
+                      cursor: "pointer",
+                      fontSize: "var(--font-sm)",
+                    }}
+                    aria-label={`Remove subtask ${subtask.title}`}
+                    title="Remove subtask"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newSubtaskTitle}
+              onChange={(e) => setNewSubtaskTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addSubtask();
+                }
+              }}
+              placeholder="Add a subtask..."
+              style={{ ...inputStyle, marginTop: 0 }}
+            />
+            <button onClick={addSubtask} style={saveBtnStyle}>Add</button>
+          </div>
         </div>
 
         {(linkedEvent || linkedBudget) && (

@@ -1,12 +1,12 @@
 "use client";
 
-import { Badge, budgetStatusVariant, Card, EmptyState } from "@/components/ui";
+import { Badge, budgetStatusVariant, Card, EmptyState, MultiSelectFilter } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
-import type { BudgetItem, TripEvent } from "@/lib/data";
-import { formatCurrency } from "@/lib/domain";
+import type { BudgetCategory, BudgetItem, BudgetItemStatus, TripEvent } from "@/lib/data";
+import { formatBudgetLabel, formatCurrency } from "@/lib/domain";
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const cellSt: CSSProperties = {
   padding: "10px 12px",
@@ -91,70 +91,194 @@ function isUserInvolved(
 
 export function BudgetView() {
   const { budgetItems, users, events, openPanel } = useApp();
-  const [selectedUserId, setSelectedUserId] = useState<string | "all">("all");
+  const participantValues = useMemo(() => users.map((user) => user.id), [users]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<BudgetCategory[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<BudgetItemStatus[]>([]);
+  const [sortField, setSortField] = useState<"title" | "category" | "planned" | "actual" | "paidBy" | "status">("planned");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const validUserIds = useMemo(() => new Set(users.map((user) => user.id)), [users]);
 
-  // Filter items based on selected participant
-  const filteredItems = useMemo(() => {
-    if (selectedUserId === "all") return budgetItems;
-    return budgetItems.filter((item) => isUserInvolved(item, selectedUserId, events, validUserIds));
-  }, [budgetItems, events, selectedUserId, validUserIds]);
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(budgetItems.map((item) => item.category))).sort(),
+    [budgetItems],
+  );
+  const statusOptions = useMemo(
+    () => Array.from(new Set(budgetItems.map((item) => item.status))).sort(),
+    [budgetItems],
+  );
 
-  const totalPlanned = filteredItems.reduce((s, b) => s + b.plannedAmount, 0);
-  const totalActual = filteredItems.reduce((s, b) => s + b.actualAmount, 0);
+  useEffect(() => {
+    setSelectedUserIds((prev) => {
+      if (participantValues.length === 0) return [];
+      if (prev.length === 0) return participantValues;
+      const next = prev.filter((value) => participantValues.includes(value));
+      return next.length === 0 ? participantValues : next;
+    });
+  }, [participantValues]);
+
+  useEffect(() => {
+    setSelectedCategories((prev) => {
+      if (categoryOptions.length === 0) return [];
+      if (prev.length === 0) return categoryOptions;
+      const next = prev.filter((value) => categoryOptions.includes(value));
+      return next.length === 0 ? categoryOptions : next;
+    });
+  }, [categoryOptions]);
+
+  useEffect(() => {
+    setSelectedStatuses((prev) => {
+      if (statusOptions.length === 0) return [];
+      if (prev.length === 0) return statusOptions;
+      const next = prev.filter((value) => statusOptions.includes(value));
+      return next.length === 0 ? statusOptions : next;
+    });
+  }, [statusOptions]);
+
+  // Base filter: selected participant
+  const baseFilteredItems = useMemo(() => {
+    if (selectedUserIds.length >= participantValues.length) return budgetItems;
+    return budgetItems.filter((item) =>
+      selectedUserIds.some((userId) => isUserInvolved(item, userId, events, validUserIds)));
+  }, [budgetItems, events, selectedUserIds, participantValues.length, validUserIds]);
+
+  // Additional filters + sorting
+  const displayedItems = useMemo(() => {
+    const filtered = baseFilteredItems.filter((item) => {
+      if (selectedCategories.length < categoryOptions.length && !selectedCategories.includes(item.category)) return false;
+      if (selectedStatuses.length < statusOptions.length && !selectedStatuses.includes(item.status)) return false;
+      return true;
+    });
+
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      const dir = sortDirection === "asc" ? 1 : -1;
+      if (sortField === "title") return a.title.localeCompare(b.title) * dir;
+      if (sortField === "category") return a.category.localeCompare(b.category) * dir;
+      if (sortField === "planned") return (a.plannedAmount - b.plannedAmount) * dir;
+      if (sortField === "actual") return (a.actualAmount - b.actualAmount) * dir;
+      if (sortField === "status") return a.status.localeCompare(b.status) * dir;
+      if (sortField === "paidBy") {
+        const aPayer = users.find((u) => u.id === a.paidByUserId)?.name ?? "";
+        const bPayer = users.find((u) => u.id === b.paidByUserId)?.name ?? "";
+        return aPayer.localeCompare(bPayer) * dir;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [
+    baseFilteredItems,
+    selectedCategories,
+    selectedStatuses,
+    categoryOptions.length,
+    statusOptions.length,
+    sortField,
+    sortDirection,
+    users,
+  ]);
+
+  const totalPlanned = displayedItems.reduce((s, b) => s + b.plannedAmount, 0);
+  const totalActual = displayedItems.reduce((s, b) => s + b.actualAmount, 0);
+  const activeFilterCount = [
+    selectedUserIds.length < participantValues.length,
+    selectedCategories.length < categoryOptions.length,
+    selectedStatuses.length < statusOptions.length,
+  ].filter(Boolean).length;
 
   // Per-person summary when a participant is selected
+  const summaryUserId = useMemo(() => {
+    if (selectedUserIds.length !== 1) return null;
+    if (selectedUserIds.length >= participantValues.length) return null;
+    return selectedUserIds[0];
+  }, [selectedUserIds, participantValues.length]);
+
   const personSummary = useMemo(() => {
-    if (selectedUserId === "all") return null;
+    if (!summaryUserId) return null;
     let owes = 0;
     let paid = 0;
     let plannedShare = 0;
-    for (const item of filteredItems) {
-      plannedShare += perPersonPlanned(item, selectedUserId, events, validUserIds);
+    for (const item of displayedItems) {
+      plannedShare += perPersonPlanned(item, summaryUserId, events, validUserIds);
       if (item.actualAmount > 0) {
-        owes += perPersonActual(item, selectedUserId, events, validUserIds);
+        owes += perPersonActual(item, summaryUserId, events, validUserIds);
       }
-      if (item.paidByUserId === selectedUserId) {
+      if (item.paidByUserId === summaryUserId) {
         paid += item.actualAmount;
       }
     }
     return { plannedShare, owes, paid, net: paid - owes };
-  }, [filteredItems, events, selectedUserId, validUserIds]);
+  }, [displayedItems, events, summaryUserId, validUserIds]);
 
-  const selectedUser = users.find((u) => u.id === selectedUserId);
+  const selectedUser = users.find((u) => u.id === summaryUserId);
+  const toggleSort = (field: "title" | "category" | "planned" | "actual" | "paidBy" | "status") => {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortField(field);
+    setSortDirection(field === "planned" || field === "actual" ? "desc" : "asc");
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-            {selectedUserId === "all"
+            {!summaryUserId
               ? `${formatCurrency(totalActual)} spent of ${formatCurrency(totalPlanned)} planned`
-              : `Showing ${filteredItems.length} items for ${selectedUser?.name ?? "participant"}`}
+              : `Showing ${displayedItems.length} items for ${selectedUser?.name ?? "participant"}`}
           </p>
         </div>
 
-        {/* Participant filter */}
-        <select
-          value={selectedUserId}
-          onChange={(e) => setSelectedUserId(e.target.value)}
-          style={{
-            padding: "8px 12px",
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--color-border)",
-            background: "var(--color-bg-muted)",
-            color: "var(--color-text-primary)",
-            fontSize: "var(--font-md)",
-            cursor: "pointer",
-            outline: "none",
-            minWidth: 180,
-          }}
-        >
-          <option value="all">All Participants</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>{u.name}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <MultiSelectFilter
+            options={users.map((u) => ({ value: u.id, label: u.name }))}
+            selectedValues={selectedUserIds}
+            onChange={setSelectedUserIds}
+            allLabel="All Participants"
+            countLabelPlural="Participants"
+            countLabelSingular="Participant"
+          />
+
+          <MultiSelectFilter
+            options={categoryOptions.map((category) => ({
+              value: category,
+              label: formatBudgetLabel(category),
+            }))}
+            selectedValues={selectedCategories}
+            onChange={(next) => setSelectedCategories(next as BudgetCategory[])}
+            allLabel="All Categories"
+            countLabelPlural="Categories"
+            countLabelSingular="Category"
+            minWidth={170}
+          />
+
+          <MultiSelectFilter
+            options={statusOptions.map((status) => ({
+              value: status,
+              label: formatBudgetLabel(status),
+            }))}
+            selectedValues={selectedStatuses}
+            onChange={(next) => setSelectedStatuses(next as BudgetItemStatus[])}
+            allLabel="All Statuses"
+            countLabelPlural="Statuses"
+            countLabelSingular="Status"
+            minWidth={160}
+          />
+
+          {activeFilterCount > 0 && (
+            <button
+              onClick={() => {
+                setSelectedUserIds(participantValues);
+                setSelectedCategories(categoryOptions);
+                setSelectedStatuses(statusOptions);
+              }}
+              style={toolbarClearBtnStyle}
+            >
+              Clear {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Per-person cost summary card */}
@@ -187,33 +311,57 @@ export function BudgetView() {
         </Card>
       )}
 
-      {filteredItems.length === 0 ? (
+      {displayedItems.length === 0 ? (
         <EmptyState
-          message={selectedUserId === "all" ? "No expenses yet" : "No expenses for this participant"}
+          message={activeFilterCount > 0 ? "No expenses match current filters" : (!summaryUserId ? "No expenses yet" : "No expenses for this participant")}
           actionLabel="Plan something with the + button above"
         />
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)" }}>
-          <table style={{ width: "100%", minWidth: selectedUserId === "all" ? 720 : 840, borderCollapse: "collapse", background: "var(--color-bg-surface)" }}>
+          <table style={{ width: "100%", minWidth: summaryUserId ? 840 : 720, borderCollapse: "collapse", background: "var(--color-bg-surface)" }}>
             <thead>
               <tr>
-                <th style={headCellSt}>Title</th>
-                <th style={headCellSt}>Category</th>
-                <th style={headCellSt}>Planned</th>
-                <th style={headCellSt}>Actual</th>
-                <th style={headCellSt}>Paid By</th>
-                <th style={headCellSt}>Status</th>
-                {selectedUserId !== "all" && <th style={headCellSt}>Your Share</th>}
+                <th style={headCellSt}>
+                  <button type="button" onClick={() => toggleSort("title")} style={headSortButtonStyle}>
+                    Title{renderSortArrow("title", sortField, sortDirection)}
+                  </button>
+                </th>
+                <th style={headCellSt}>
+                  <button type="button" onClick={() => toggleSort("category")} style={headSortButtonStyle}>
+                    Category{renderSortArrow("category", sortField, sortDirection)}
+                  </button>
+                </th>
+                <th style={headCellSt}>
+                  <button type="button" onClick={() => toggleSort("planned")} style={headSortButtonStyle}>
+                    Planned{renderSortArrow("planned", sortField, sortDirection)}
+                  </button>
+                </th>
+                <th style={headCellSt}>
+                  <button type="button" onClick={() => toggleSort("actual")} style={headSortButtonStyle}>
+                    Actual{renderSortArrow("actual", sortField, sortDirection)}
+                  </button>
+                </th>
+                <th style={headCellSt}>
+                  <button type="button" onClick={() => toggleSort("paidBy")} style={headSortButtonStyle}>
+                    Paid By{renderSortArrow("paidBy", sortField, sortDirection)}
+                  </button>
+                </th>
+                <th style={headCellSt}>
+                  <button type="button" onClick={() => toggleSort("status")} style={headSortButtonStyle}>
+                    Status{renderSortArrow("status", sortField, sortDirection)}
+                  </button>
+                </th>
+                {summaryUserId && <th style={headCellSt}>Your Share</th>}
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => {
+              {displayedItems.map((item) => {
                 const payer = users.find((u) => u.id === item.paidByUserId);
-                const yourShare = selectedUserId !== "all"
+                const yourShare = summaryUserId
                   ? (
                     item.actualAmount > 0
-                      ? perPersonActual(item, selectedUserId, events, validUserIds)
-                      : perPersonPlanned(item, selectedUserId, events, validUserIds)
+                      ? perPersonActual(item, summaryUserId, events, validUserIds)
+                      : perPersonPlanned(item, summaryUserId, events, validUserIds)
                   )
                   : 0;
 
@@ -235,7 +383,7 @@ export function BudgetView() {
                       <span style={{ fontWeight: 500 }}>{item.title}</span>
                     </td>
                     <td style={cellSt}>
-                      <Badge variant="accent">{item.category}</Badge>
+                      <Badge variant="accent">{formatBudgetLabel(item.category)}</Badge>
                     </td>
                     <td style={cellSt}>{formatCurrency(item.plannedAmount)}</td>
                     <td style={{ ...cellSt, color: item.actualAmount > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
@@ -252,9 +400,9 @@ export function BudgetView() {
                       )}
                     </td>
                     <td style={cellSt}>
-                      <Badge variant={budgetStatusVariant(item.status)}>{item.status}</Badge>
+                      <Badge variant={budgetStatusVariant(item.status)}>{formatBudgetLabel(item.status)}</Badge>
                     </td>
-                    {selectedUserId !== "all" && (
+                    {summaryUserId && (
                       <td style={{ ...cellSt, fontWeight: 600, color: "var(--color-accent)" }}>
                         {formatCurrency(yourShare)}
                       </td>
@@ -268,4 +416,38 @@ export function BudgetView() {
       )}
     </div>
   );
+}
+
+const toolbarClearBtnStyle: CSSProperties = {
+  padding: "5px 10px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--color-border)",
+  background: "transparent",
+  color: "var(--color-text-secondary)",
+  fontSize: "var(--font-sm)",
+  cursor: "pointer",
+};
+
+const headSortButtonStyle: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  margin: 0,
+  font: "inherit",
+  color: "inherit",
+  textTransform: "inherit",
+  letterSpacing: "inherit",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+};
+
+function renderSortArrow(
+  field: "title" | "category" | "planned" | "actual" | "paidBy" | "status",
+  sortField: "title" | "category" | "planned" | "actual" | "paidBy" | "status",
+  sortDirection: "asc" | "desc",
+): string {
+  if (field !== sortField) return "";
+  return sortDirection === "asc" ? " ▲" : " ▼";
 }

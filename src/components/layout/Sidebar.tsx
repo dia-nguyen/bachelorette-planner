@@ -315,7 +315,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
             <button
               onClick={() => onTabChange(item.id)}
               aria-label={item.label}
-              className="flex items-center justify-center transition-colors"
+              className="peer flex items-center justify-center transition-colors"
               style={{
                 width: 44,
                 height: 44,
@@ -350,7 +350,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
                 transition: "opacity 120ms ease",
                 zIndex: 220,
               }}
-              className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+              className="invisible opacity-0 peer-hover:visible peer-hover:opacity-100 peer-focus-visible:visible peer-focus-visible:opacity-100"
             >
               {item.label}
             </span>
@@ -365,7 +365,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
         <button
           aria-label="Settings"
           onClick={() => onTabChange("settings")}
-          className="flex items-center justify-center transition-colors"
+          className="peer flex items-center justify-center transition-colors"
           style={{
             width: 44,
             height: 44,
@@ -398,7 +398,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
             transition: "opacity 120ms ease",
             zIndex: 220,
           }}
-          className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+          className="invisible opacity-0 peer-hover:visible peer-hover:opacity-100 peer-focus-visible:visible peer-focus-visible:opacity-100"
         >
           Settings
         </span>
@@ -409,7 +409,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
           <button
             aria-label="Log Out"
             onClick={onSignOut}
-            className="flex items-center justify-center transition-colors"
+            className="peer flex items-center justify-center transition-colors"
             style={{
               width: 44,
               height: 44,
@@ -442,7 +442,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
               transition: "opacity 120ms ease",
               zIndex: 220,
             }}
-            className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+            className="invisible opacity-0 peer-hover:visible peer-hover:opacity-100 peer-focus-visible:visible peer-focus-visible:opacity-100"
           >
             Log Out
           </span>

@@ -18,8 +18,16 @@ function formatDue(dueAt: string | null): { label: string; urgent: boolean; } {
   const due = new Date(dueAt);
   const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   if (diffDays < 0) return { label: `${Math.abs(diffDays)}d overdue`, urgent: true };
-  if (diffDays <= 2) return { label: `Due in ${diffDays} days`, urgent: true };
+  if (diffDays === 0) return { label: "Due today", urgent: true };
+  if (diffDays <= 2) return { label: `Due in ${diffDays} ${diffDays === 1 ? "day" : "days"}`, urgent: true };
   return { label: `Due ${due.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`, urgent: false };
+}
+
+function getTaskCompletionPercent(task: Task): number {
+  const subtasks = task.subtasks ?? [];
+  if (subtasks.length === 0) return task.status === "DONE" ? 100 : 0;
+  const done = subtasks.filter((s) => s.isDone).length;
+  return Math.round((done / subtasks.length) * 100);
 }
 
 export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps) {
@@ -43,6 +51,8 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
           {openTasks.slice(0, 6).map((task) => {
             const assignees = users.filter((u) => (task.assigneeUserIds ?? []).includes(u.id));
             const { label: dueLabel, urgent } = formatDue(task.dueAt);
+            const completionPercent = getTaskCompletionPercent(task);
+            const hasSubtasks = (task.subtasks?.length ?? 0) > 0;
 
             return (
               <button
@@ -92,7 +102,10 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
                     )}
                   </div>
                 </div>
-                <Badge variant={urgent ? "negative" : "neutral"}>{dueLabel}</Badge>
+                <div className="flex items-center gap-2">
+                  {hasSubtasks && <Badge variant="accent">{completionPercent}%</Badge>}
+                  <Badge variant={urgent ? "negative" : "neutral"}>{dueLabel}</Badge>
+                </div>
               </button>
             );
           })}

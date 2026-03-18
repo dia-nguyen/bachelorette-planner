@@ -8,3 +8,4 @@ export {
 } from "./Badge";
 export { Card } from "./Card";
 export { EmptyState } from "./EmptyState";
+export { MultiSelectFilter } from "./MultiSelectFilter";

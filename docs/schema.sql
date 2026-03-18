@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority              task_priority NOT NULL DEFAULT 'MEDIUM',
   due_at                TIMESTAMPTZ,
   assignee_user_ids     UUID[] NOT NULL DEFAULT '{}',
+  subtasks              JSONB NOT NULL DEFAULT '[]'::jsonb,
   related_event_id      UUID REFERENCES events(id) ON DELETE SET NULL,
   related_budget_item_id UUID,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()

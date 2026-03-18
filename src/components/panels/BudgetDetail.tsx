@@ -3,7 +3,7 @@
 import { Badge, budgetStatusVariant } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import type { BudgetCategory, BudgetItem, BudgetItemStatus, CostSplitType, Task, TripEvent, User } from "@/lib/data";
-import { formatCurrency } from "@/lib/domain";
+import { formatBudgetLabel, formatCurrency } from "@/lib/domain";
 import { useState } from "react";
 import { HiPencilAlt } from "react-icons/hi";
 import { BsCalendarDate } from "react-icons/bs";
@@ -193,7 +193,7 @@ export function BudgetDetail({
               style={inputStyle}
             >
               {CATEGORIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>{formatBudgetLabel(c)}</option>
               ))}
             </select>
           </label>
@@ -205,7 +205,7 @@ export function BudgetDetail({
               style={inputStyle}
             >
               {STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{formatBudgetLabel(s)}</option>
               ))}
             </select>
           </label>
@@ -534,8 +534,8 @@ export function BudgetDetail({
               {item.title}
             </h2>
             <div className="flex items-center gap-2">
-              <Badge variant={budgetStatusVariant(item.status)}>{item.status}</Badge>
-              <Badge variant="accent">{item.category}</Badge>
+              <Badge variant={budgetStatusVariant(item.status)}>{formatBudgetLabel(item.status)}</Badge>
+              <Badge variant="accent">{formatBudgetLabel(item.category)}</Badge>
             </div>
           </div>
           <div className="flex items-center gap-2">

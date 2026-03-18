@@ -99,6 +99,13 @@ export interface Task {
   assigneeUserIds: string[];
   relatedEventId: string | null;
   relatedBudgetItemId: string | null;
+  subtasks?: TaskSubtask[];
+}
+
+export interface TaskSubtask {
+  id: string;
+  title: string;
+  isDone: boolean;
 }
 
 export interface BudgetItem {
@@ -226,6 +233,7 @@ export interface PlanActivityInput {
   taskPriority?: TaskPriority;
   taskStatus?: TaskStatus;
   taskDueAt?: string | null; // ISO
+  taskSubtasks?: TaskSubtask[];
 
   // 💰 Budget (optional)
   createBudget: boolean;

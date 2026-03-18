@@ -1,10 +1,10 @@
 "use client";
 
-import { Badge, Card, EmptyState } from "@/components/ui";
+import { Badge, Card, EmptyState, MultiSelectFilter } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { useApp } from "@/lib/context";
 import type { Task } from "@/lib/data";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 // ---- Constants ----
 
@@ -22,7 +22,60 @@ const COLUMN_ACCENT: Record<string, string> = {
 
 const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
+const listCellSt: React.CSSProperties = {
+  padding: "10px 12px",
+  fontSize: "var(--font-sm)",
+  verticalAlign: "middle",
+  borderBottom: "1px solid var(--color-border)",
+};
+
+const listHeadCellSt: React.CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-muted)",
+  borderBottom: "2px solid var(--color-border)",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
+const listHeadSortButtonStyle: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  margin: 0,
+  font: "inherit",
+  color: "inherit",
+  textTransform: "inherit",
+  letterSpacing: "inherit",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+};
+
+function renderListSortArrow(
+  field: ListSortField,
+  activeField: ListSortField,
+  direction: "asc" | "desc",
+): string {
+  if (field !== activeField) return "";
+  return direction === "asc" ? " ▲" : " ▼";
+}
+
 type ViewMode = "kanban" | "list" | "mine";
+type ListSortField = "task" | "status" | "priority" | "assignees" | "due" | "complete";
+const TASKS_VIEW_MODE_KEY = "bp-tasks-view-mode";
+
+function getTaskCompletionPercent(task: Task): number {
+  const subtasks = task.subtasks ?? [];
+  if (subtasks.length === 0) return task.status === "DONE" ? 100 : 0;
+  const done = subtasks.filter((s) => s.isDone).length;
+  return Math.round((done / subtasks.length) * 100);
+}
 
 // ---- Sub-components ----
 
@@ -43,6 +96,8 @@ function TaskCard({
 }) {
   const assigneeUsers = users.filter((u) => (task.assigneeUserIds ?? []).includes(u.id));
   const hasLinks = task.relatedEventId || task.relatedBudgetItemId;
+  const hasSubtasks = (task.subtasks?.length ?? 0) > 0;
+  const completionPercent = getTaskCompletionPercent(task);
 
   return (
     <div
@@ -94,6 +149,19 @@ function TaskCard({
               Due {new Date(task.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             </span>
           )}
+          {hasSubtasks && (
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--color-accent)",
+                background: "var(--color-accent-soft)",
+                padding: "1px 6px",
+                borderRadius: "var(--radius-pill)",
+              }}
+            >
+              {completionPercent}%
+            </span>
+          )}
           {hasLinks && (
             <span
               style={{
@@ -118,15 +186,39 @@ function TaskCard({
 export function TasksView() {
   const { tasks, users, currentUserId, updateTask, openPanel } = useApp();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
-  const [filterAssignee, setFilterAssignee] = useState<string>("all");
-  const [filterPriority, setFilterPriority] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "kanban";
+    const saved = window.localStorage.getItem(TASKS_VIEW_MODE_KEY);
+    if (saved === "kanban" || saved === "list" || saved === "mine") return saved;
+    return "kanban";
+  });
+  const assigneeValues = useMemo(() => users.map((u) => u.id), [users]);
+  const priorityValues = useMemo(() => ["HIGH", "MEDIUM", "LOW"], []);
+  const statusValues = useMemo(() => ["TODO", "IN_PROGRESS", "DONE"], []);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<string[]>(priorityValues);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(statusValues);
+  const [listSortField, setListSortField] = useState<ListSortField>("status");
+  const [listSortDirection, setListSortDirection] = useState<"asc" | "desc">("asc");
 
   // Drag state (kanban only)
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
   const dragTask = useRef<Task | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(TASKS_VIEW_MODE_KEY, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    setSelectedAssignees((prev) => {
+      if (assigneeValues.length === 0) return [];
+      if (prev.length === 0) return assigneeValues;
+      const next = prev.filter((id) => assigneeValues.includes(id));
+      return next.length === 0 ? assigneeValues : next;
+    });
+  }, [assigneeValues]);
 
   // Filtered tasks
   const filtered = useMemo(() => {
@@ -134,17 +226,27 @@ export function TasksView() {
     if (viewMode === "mine") {
       result = result.filter((t) => (t.assigneeUserIds ?? []).includes(currentUserId));
     }
-    if (filterAssignee !== "all") {
-      result = result.filter((t) => (t.assigneeUserIds ?? []).includes(filterAssignee));
+    if (selectedAssignees.length < assigneeValues.length) {
+      result = result.filter((t) => (t.assigneeUserIds ?? []).some((id) => selectedAssignees.includes(id)));
     }
-    if (filterPriority !== "all") {
-      result = result.filter((t) => t.priority === filterPriority);
+    if (selectedPriorities.length < priorityValues.length) {
+      result = result.filter((t) => selectedPriorities.includes(t.priority));
     }
-    if (filterStatus !== "all") {
-      result = result.filter((t) => t.status === filterStatus);
+    if (selectedStatuses.length < statusValues.length) {
+      result = result.filter((t) => selectedStatuses.includes(t.status));
     }
     return result;
-  }, [tasks, viewMode, filterAssignee, filterPriority, filterStatus, currentUserId]);
+  }, [
+    tasks,
+    viewMode,
+    selectedAssignees,
+    selectedPriorities,
+    selectedStatuses,
+    assigneeValues.length,
+    priorityValues.length,
+    statusValues.length,
+    currentUserId,
+  ]);
 
   const grouped = {
     TODO: filtered.filter((t) => t.status === "TODO"),
@@ -178,8 +280,20 @@ export function TasksView() {
     dragTask.current = null;
   }
 
-  const activeFilters = [filterAssignee, filterPriority, filterStatus].filter((v) => v !== "all").length;
+  const activeFilters = [
+    selectedAssignees.length < assigneeValues.length,
+    selectedPriorities.length < priorityValues.length,
+    selectedStatuses.length < statusValues.length,
+  ].filter(Boolean).length;
   const currentUser = users.find((u) => u.id === currentUserId);
+  const toggleListSort = (field: ListSortField) => {
+    if (listSortField === field) {
+      setListSortDirection((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setListSortField(field);
+    setListSortDirection(field === "due" || field === "complete" ? "desc" : "asc");
+  };
 
   // ---- Toolbar ----
   const toolbar = (
@@ -219,66 +333,50 @@ export function TasksView() {
       <div style={{ flex: 1 }} />
 
       {/* Filters */}
-      <select
-        value={filterAssignee}
-        onChange={(e) => setFilterAssignee(e.target.value)}
-        style={{
-          fontSize: "var(--font-sm)",
-          padding: "5px 10px",
-          borderRadius: "var(--radius-md)",
-          border: `1px solid ${filterAssignee !== "all" ? "var(--color-accent)" : "var(--color-border)"}`,
-          background: filterAssignee !== "all" ? "var(--color-accent-soft)" : "var(--color-bg-surface)",
-          color: "var(--color-text-primary)",
-          cursor: "pointer",
-        }}
-      >
-        <option value="all">All Assignees</option>
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>{u.name}</option>
-        ))}
-      </select>
+      <MultiSelectFilter
+        options={users.map((u) => ({ value: u.id, label: u.name }))}
+        selectedValues={selectedAssignees}
+        onChange={setSelectedAssignees}
+        allLabel="All Assignees"
+        countLabelPlural="Assignees"
+        countLabelSingular="Assignee"
+      />
 
-      <select
-        value={filterPriority}
-        onChange={(e) => setFilterPriority(e.target.value)}
-        style={{
-          fontSize: "var(--font-sm)",
-          padding: "5px 10px",
-          borderRadius: "var(--radius-md)",
-          border: `1px solid ${filterPriority !== "all" ? "var(--color-accent)" : "var(--color-border)"}`,
-          background: filterPriority !== "all" ? "var(--color-accent-soft)" : "var(--color-bg-surface)",
-          color: "var(--color-text-primary)",
-          cursor: "pointer",
-        }}
-      >
-        <option value="all">All Priorities</option>
-        <option value="HIGH">High</option>
-        <option value="MEDIUM">Medium</option>
-        <option value="LOW">Low</option>
-      </select>
+      <MultiSelectFilter
+        options={[
+          { value: "HIGH", label: "High" },
+          { value: "MEDIUM", label: "Medium" },
+          { value: "LOW", label: "Low" },
+        ]}
+        selectedValues={selectedPriorities}
+        onChange={setSelectedPriorities}
+        allLabel="All Priorities"
+        countLabelPlural="Priorities"
+        countLabelSingular="Priority"
+        minWidth={170}
+      />
 
-      <select
-        value={filterStatus}
-        onChange={(e) => setFilterStatus(e.target.value)}
-        style={{
-          fontSize: "var(--font-sm)",
-          padding: "5px 10px",
-          borderRadius: "var(--radius-md)",
-          border: `1px solid ${filterStatus !== "all" ? "var(--color-accent)" : "var(--color-border)"}`,
-          background: filterStatus !== "all" ? "var(--color-accent-soft)" : "var(--color-bg-surface)",
-          color: "var(--color-text-primary)",
-          cursor: "pointer",
-        }}
-      >
-        <option value="all">All Statuses</option>
-        <option value="TODO">To Do</option>
-        <option value="IN_PROGRESS">In Progress</option>
-        <option value="DONE">Done</option>
-      </select>
+      <MultiSelectFilter
+        options={[
+          { value: "TODO", label: "To Do" },
+          { value: "IN_PROGRESS", label: "In Progress" },
+          { value: "DONE", label: "Done" },
+        ]}
+        selectedValues={selectedStatuses}
+        onChange={setSelectedStatuses}
+        allLabel="All Statuses"
+        countLabelPlural="Statuses"
+        countLabelSingular="Status"
+        minWidth={160}
+      />
 
       {activeFilters > 0 && (
         <button
-          onClick={() => { setFilterAssignee("all"); setFilterPriority("all"); setFilterStatus("all"); }}
+          onClick={() => {
+            setSelectedAssignees(assigneeValues);
+            setSelectedPriorities(priorityValues);
+            setSelectedStatuses(statusValues);
+          }}
           style={{
             fontSize: "var(--font-sm)",
             padding: "5px 10px",
@@ -361,98 +459,142 @@ export function TasksView() {
   );
 
   // ---- List view ----
-  const sortedList = [...filtered].sort((a, b) => {
-    const statusOrder = { TODO: 0, IN_PROGRESS: 1, DONE: 2 };
-    if (statusOrder[a.status] !== statusOrder[b.status]) return statusOrder[a.status] - statusOrder[b.status];
-    return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
-  });
+  const sortedList = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const dir = listSortDirection === "asc" ? 1 : -1;
+      if (listSortField === "task") return a.title.localeCompare(b.title) * dir;
+      if (listSortField === "status") {
+        const statusOrder = { TODO: 0, IN_PROGRESS: 1, DONE: 2 };
+        return (statusOrder[a.status] - statusOrder[b.status]) * dir;
+      }
+      if (listSortField === "priority") return (PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]) * dir;
+      if (listSortField === "assignees") return ((a.assigneeUserIds?.length ?? 0) - (b.assigneeUserIds?.length ?? 0)) * dir;
+      if (listSortField === "due") {
+        const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Number.NEGATIVE_INFINITY;
+        const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Number.NEGATIVE_INFINITY;
+        return (aDue - bDue) * dir;
+      }
+      const aCompletion = (a.subtasks?.length ?? 0) > 0 ? getTaskCompletionPercent(a) : -1;
+      const bCompletion = (b.subtasks?.length ?? 0) > 0 ? getTaskCompletionPercent(b) : -1;
+      return (aCompletion - bCompletion) * dir;
+    });
+    return list;
+  }, [filtered, listSortField, listSortDirection]);
 
   const listView = (
-    <Card>
-      <div
-        className="grid"
-        style={{
-          gridTemplateColumns: "1fr 100px 90px 100px 120px",
-          gap: "0 12px",
-          fontSize: "var(--font-xs)",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          color: "var(--color-text-tertiary)",
-          paddingBottom: 8,
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <span>Task</span>
-        <span>Status</span>
-        <span>Priority</span>
-        <span>Assignees</span>
-        <span>Due</span>
-      </div>
-      {sortedList.length === 0 ? (
-        <EmptyState message="No tasks match filters" />
-      ) : (
-        sortedList.map((task) => {
-          const assigneeUsers = users.filter((u) => (task.assigneeUserIds ?? []).includes(u.id));
-          return (
-            <div
-              key={task.id}
-              className="grid"
-              onClick={() => openPanel("task", task.id)}
-              style={{
-                gridTemplateColumns: "1fr 100px 90px 100px 120px",
-                gap: "0 12px",
-                alignItems: "center",
-                padding: "10px 0",
-                borderBottom: "1px solid var(--color-border)",
-                cursor: "pointer",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-soft)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <span style={{ fontWeight: 500, fontSize: "var(--font-sm)" }}>{task.title}</span>
-              <span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "2px 8px",
-                    borderRadius: "var(--radius-pill)",
-                    background:
-                      task.status === "DONE" ? "#dcfce7" :
-                        task.status === "IN_PROGRESS" ? "var(--color-accent-soft)" : "var(--color-bg-muted)",
-                    color:
-                      task.status === "DONE" ? "#16a34a" :
-                        task.status === "IN_PROGRESS" ? "var(--color-accent)" : "var(--color-text-secondary)",
+    <div style={{ overflowX: "auto", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)" }}>
+      <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", background: "var(--color-bg-surface)" }}>
+        <thead>
+          <tr>
+            <th style={listHeadCellSt}>
+              <button type="button" onClick={() => toggleListSort("task")} style={listHeadSortButtonStyle}>
+                Task{renderListSortArrow("task", listSortField, listSortDirection)}
+              </button>
+            </th>
+            <th style={listHeadCellSt}>
+              <button type="button" onClick={() => toggleListSort("status")} style={listHeadSortButtonStyle}>
+                Status{renderListSortArrow("status", listSortField, listSortDirection)}
+              </button>
+            </th>
+            <th style={listHeadCellSt}>
+              <button type="button" onClick={() => toggleListSort("priority")} style={listHeadSortButtonStyle}>
+                Priority{renderListSortArrow("priority", listSortField, listSortDirection)}
+              </button>
+            </th>
+            <th style={listHeadCellSt}>
+              <button type="button" onClick={() => toggleListSort("assignees")} style={listHeadSortButtonStyle}>
+                Assignees{renderListSortArrow("assignees", listSortField, listSortDirection)}
+              </button>
+            </th>
+            <th style={listHeadCellSt}>
+              <button type="button" onClick={() => toggleListSort("due")} style={listHeadSortButtonStyle}>
+                Due{renderListSortArrow("due", listSortField, listSortDirection)}
+              </button>
+            </th>
+            <th style={listHeadCellSt}>
+              <button type="button" onClick={() => toggleListSort("complete")} style={listHeadSortButtonStyle}>
+                Complete{renderListSortArrow("complete", listSortField, listSortDirection)}
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedList.length === 0 ? (
+            <tr>
+              <td colSpan={6} style={{ padding: 0 }}>
+                <EmptyState message="No tasks match filters" />
+              </td>
+            </tr>
+          ) : (
+            sortedList.map((task) => {
+              const assigneeUsers = users.filter((u) => (task.assigneeUserIds ?? []).includes(u.id));
+              return (
+                <tr
+                  key={task.id}
+                  onClick={() => openPanel("task", task.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openPanel("task", task.id);
+                    }
                   }}
+                  tabIndex={0}
+                  role="button"
+                  style={{ cursor: "pointer" }}
                 >
-                  {COLUMN_LABELS[task.status]}
-                </span>
-              </span>
-              <span>
-                <Badge variant={task.priority === "HIGH" ? "negative" : task.priority === "MEDIUM" ? "warning" : "neutral"}>
-                  {task.priority}
-                </Badge>
-              </span>
-              <span className="flex items-center gap-1">
-                {assigneeUsers.length > 0 ? (
-                  assigneeUsers.slice(0, 3).map((u) => (
-                    <Avatar key={u.id} name={u.name} color={u.avatarColor} size={20} />
-                  ))
-                ) : (
-                  <span style={{ fontSize: 11, color: "#d97706" }}>Unassigned</span>
-                )}
-              </span>
-              <span style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-                {task.dueAt
-                  ? new Date(task.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                  : "—"}
-              </span>
-            </div>
-          );
-        })
-      )}
-    </Card>
+                  <td style={listCellSt}>
+                    <span style={{ fontWeight: 500, fontSize: "var(--font-sm)" }}>{task.title}</span>
+                  </td>
+                  <td style={listCellSt}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: "var(--radius-pill)",
+                        background:
+                          task.status === "DONE" ? "#dcfce7" :
+                            task.status === "IN_PROGRESS" ? "var(--color-accent-soft)" : "var(--color-bg-muted)",
+                        color:
+                          task.status === "DONE" ? "#16a34a" :
+                            task.status === "IN_PROGRESS" ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      }}
+                    >
+                      {COLUMN_LABELS[task.status]}
+                    </span>
+                  </td>
+                  <td style={listCellSt}>
+                    <Badge variant={task.priority === "HIGH" ? "negative" : task.priority === "MEDIUM" ? "warning" : "neutral"}>
+                      {task.priority}
+                    </Badge>
+                  </td>
+                  <td style={listCellSt}>
+                    <span className="flex items-center gap-1">
+                      {assigneeUsers.length > 0 ? (
+                        assigneeUsers.slice(0, 3).map((u) => (
+                          <Avatar key={u.id} name={u.name} color={u.avatarColor} size={20} />
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 11, color: "#d97706" }}>Unassigned</span>
+                      )}
+                    </span>
+                  </td>
+                  <td style={{ ...listCellSt, color: "var(--color-text-secondary)" }}>
+                    {task.dueAt
+                      ? new Date(task.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                      : "—"}
+                  </td>
+                  <td style={{ ...listCellSt, color: "var(--color-text-secondary)" }}>
+                    {(task.subtasks?.length ?? 0) > 0 ? `${getTaskCompletionPercent(task)}%` : ""}
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 
   return (

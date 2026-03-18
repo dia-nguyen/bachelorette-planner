@@ -104,6 +104,31 @@ function mapPollRow(row: any): Poll {
   });
 }
 
+function normalizeTaskSubtasks(raw: unknown): { id: string; title: string; isDone: boolean }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => {
+      const typed = entry as Record<string, unknown>;
+      return {
+        id: String(typed.id ?? ""),
+        title: String(typed.title ?? "").trim(),
+        isDone: Boolean(typed.isDone),
+      };
+    })
+    .filter((subtask) => subtask.id && subtask.title.length > 0);
+}
+
+function deriveStatusFromSubtasks(
+  subtasks: { id: string; title: string; isDone: boolean }[],
+): Task["status"] | null {
+  if (subtasks.length === 0) return null;
+  const doneCount = subtasks.filter((subtask) => subtask.isDone).length;
+  if (doneCount === subtasks.length) return "DONE";
+  if (doneCount > 0) return "IN_PROGRESS";
+  return "TODO";
+}
+
 function rescalePerPersonEvenAmount(totalAmount: number, previousCount: number, nextCount: number): number {
   const prev = previousCount > 0 ? previousCount : 1;
   const next = nextCount > 0 ? nextCount : 1;
@@ -458,6 +483,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             assigneeUserIds: (t.assignee_user_ids ?? []) as string[],
             relatedEventId: t.related_event_id,
             relatedBudgetItemId: t.related_budget_item_id,
+            subtasks: normalizeTaskSubtasks(t.subtasks),
           })),
         );
 
@@ -1075,18 +1101,26 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   );
   const updateTask = useCallback(
     (id: string, patch: Partial<Task>) => {
+      const normalizedPatch: Partial<Task> = { ...patch };
+      if ("subtasks" in normalizedPatch) {
+        const nextSubtasks = normalizeTaskSubtasks(normalizedPatch.subtasks);
+        normalizedPatch.subtasks = nextSubtasks;
+        const nextStatus = deriveStatusFromSubtasks(nextSubtasks);
+        if (nextStatus) normalizedPatch.status = nextStatus;
+      }
+
       if (isSupabaseMode && activeTripId) {
         setSupabaseTasks((prev) =>
-          prev.map((t) => t.id === id ? { ...t, ...patch } : t)
+          prev.map((t) => t.id === id ? { ...t, ...normalizedPatch } : t)
         );
         void fetch(`/api/trips/${activeTripId}/tasks`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, patch }),
+          body: JSON.stringify({ id, patch: normalizedPatch }),
         });
         return;
       }
-      repo.updateTask(id, patch);
+      repo.updateTask(id, normalizedPatch);
     },
     [isSupabaseMode, activeTripId]
   );
@@ -1461,6 +1495,7 @@ export function AppProvider({ children }: { children: ReactNode; }) {
         assigneeUserIds: bi.responsibleUserId ? [bi.responsibleUserId] : [],
         relatedEventId: bi.relatedEventId,
         relatedBudgetItemId: budgetItemId,
+        subtasks: [],
       });
       repo.updateBudgetItem(budgetItemId, { relatedTaskId: taskId });
     },
@@ -1473,6 +1508,8 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       const eventId = input.createEvent ? uuid() : null;
       const taskId = input.createTask ? uuid() : null;
       const budgetId = input.createBudget ? uuid() : null;
+      const initialTaskSubtasks = normalizeTaskSubtasks(input.taskSubtasks);
+      const initialTaskStatus = deriveStatusFromSubtasks(initialTaskSubtasks) ?? (input.taskStatus || "TODO");
 
       if (isSupabaseMode && activeTripId) {
         const parseError = async (res: Response, fallback: string) => {
@@ -1516,12 +1553,13 @@ export function AppProvider({ children }: { children: ReactNode; }) {
                 input.taskTitleOverride ||
                 (input.createEvent ? `Book: ${input.title}` : input.title),
               description: input.description,
-              status: input.taskStatus || "TODO",
+              status: initialTaskStatus,
               priority: input.taskPriority || "MEDIUM",
               dueAt: input.taskDueAt || null,
               assigneeUserIds: input.taskAssigneeIds || [],
               relatedEventId: eventId,
               relatedBudgetItemId: null,
+              subtasks: initialTaskSubtasks,
             }),
           });
           if (!taskRes.ok) {
@@ -1599,12 +1637,13 @@ export function AppProvider({ children }: { children: ReactNode; }) {
             input.taskTitleOverride ||
             (input.createEvent ? `Book: ${input.title}` : input.title),
           description: input.description,
-          status: input.taskStatus || "TODO",
+          status: initialTaskStatus,
           priority: input.taskPriority || "MEDIUM",
           dueAt: input.taskDueAt || null,
           assigneeUserIds: input.taskAssigneeIds || [],
           relatedEventId: eventId,
           relatedBudgetItemId: budgetId,
+          subtasks: initialTaskSubtasks,
         });
       }
 

@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui";
 import type { CategoryBreakdown } from "@/lib/data";
-import { formatCurrency } from "@/lib/domain";
+import { formatBudgetLabel, formatCurrency } from "@/lib/domain";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -15,10 +15,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   MISC: "#9CA3AF",
 };
 
-function categoryLabel(cat: string): string {
-  return cat.charAt(0) + cat.slice(1).toLowerCase();
-}
-
 interface BudgetSnapshotProps {
   breakdown: CategoryBreakdown[];
   totalBudget: number;
@@ -27,7 +23,7 @@ interface BudgetSnapshotProps {
 
 export function BudgetSnapshot({ breakdown, totalBudget, totalSpent }: BudgetSnapshotProps) {
   const chartData = breakdown.map((b) => ({
-    name: categoryLabel(b.category),
+    name: formatBudgetLabel(b.category),
     value: b.actual > 0 ? b.actual : b.planned,
     color: CATEGORY_COLORS[b.category] ?? "#9CA3AF",
   }));
