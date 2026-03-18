@@ -58,7 +58,7 @@ function stripUnsupportedPollColumns(
 ) {
   if (!message) return payload;
 
-  const unsupported = ["visibility", "required_user_ids", "is_published", "max_votes_per_user"];
+  const unsupported = ["visibility", "required_user_ids", "is_published"];
   const lowered = message.toLowerCase();
   const cleaned = { ...payload };
   let removedAny = false;
