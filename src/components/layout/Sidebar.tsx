@@ -140,12 +140,12 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
             bottom: 0,
             zIndex: 140,
             background: "var(--color-bg-surface)",
-            borderTop: "1px solid var(--color-border)",
-            paddingBottom: "max(8px, env(safe-area-inset-bottom))",
-            paddingTop: 6,
+            borderTop: "none",
+            paddingBottom: "env(safe-area-inset-bottom)",
+            paddingTop: 0,
           }}
         >
-          <div className="grid grid-cols-5 gap-1" style={{ padding: "0 8px" }}>
+          <div className="grid grid-cols-5" style={{ padding: 0 }}>
             {primaryMobileItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
@@ -154,8 +154,8 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
                   onClick={() => onTabChange(item.id)}
                   style={{
                     minWidth: 0,
-                    height: 52,
-                    borderRadius: "var(--radius-md)",
+                    height: 58,
+                    borderRadius: 0,
                     border: "none",
                     background: isActive ? "var(--color-accent-soft)" : "transparent",
                     color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
@@ -176,8 +176,8 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
               onClick={() => setMoreOpen((open) => !open)}
               style={{
                 minWidth: 0,
-                height: 52,
-                borderRadius: "var(--radius-md)",
+                height: 58,
+                borderRadius: 0,
                 border: "none",
                 background: isMoreActive || moreOpen ? "var(--color-accent-soft)" : "transparent",
                 color: isMoreActive || moreOpen ? "var(--color-accent)" : "var(--color-text-secondary)",
