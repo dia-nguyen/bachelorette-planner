@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS polls (
   created_by_user_id  UUID REFERENCES profiles(id) ON DELETE SET NULL,
   options             JSONB NOT NULL DEFAULT '[]',
   is_closed           BOOLEAN NOT NULL DEFAULT false,
+  is_published        BOOLEAN NOT NULL DEFAULT false,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -27,6 +27,15 @@ function toHref(url: string): string {
   return `https://${trimmed}`;
 }
 
+function parseOptionPrice(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function PollsView() {
   const {
     polls,
@@ -76,7 +85,7 @@ export function PollsView() {
     setRequiredUserIds([]);
   };
 
-  const onCreatePoll = () => {
+  const onCreatePoll = (isPublished: boolean) => {
     const cleanQuestion = question.trim();
     const cleanOptions = options
       .map((option) => ({
@@ -97,6 +106,7 @@ export function PollsView() {
       createdByUserId: currentUserId,
       options: cleanOptions,
       isClosed: false,
+      isPublished,
       visibility,
       requiredUserIds,
       createdAt: new Date().toISOString(),
@@ -107,7 +117,7 @@ export function PollsView() {
   };
 
   const onVote = (poll: Poll, optionId: string) => {
-    if (poll.isClosed) return;
+    if (poll.isClosed || !poll.isPublished) return;
     const selectedOptionId = getUserVoteOptionId(poll, currentUserId);
     const nextOptions = poll.options.map((option) => ({
       ...option,
@@ -160,6 +170,11 @@ export function PollsView() {
                       <Badge variant={poll.isClosed ? "neutral" : "accent"}>
                         {poll.isClosed ? "Closed" : "Open"}
                       </Badge>
+                      {isAdmin && (
+                        <Badge variant={poll.isPublished ? "accent" : "neutral"}>
+                          {poll.isPublished ? "Published" : "Draft"}
+                        </Badge>
+                      )}
                       <Badge variant="neutral">
                         {poll.visibility === "anonymous" ? "Anonymous voting" : "Public voting"}
                       </Badge>
@@ -181,13 +196,21 @@ export function PollsView() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {isAdmin && (
                       <button
+                        onClick={() => updatePoll(poll.id, { isPublished: !poll.isPublished })}
+                        style={secondaryButtonStyle}
+                      >
+                        {poll.isPublished ? "Move to draft" : "Publish"}
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
                         onClick={() => updatePoll(poll.id, { isClosed: !poll.isClosed })}
                         style={secondaryButtonStyle}
                       >
                         {poll.isClosed ? "Reopen" : "Close"}
                       </button>
                     )}
-                    {(isAdmin || poll.createdByUserId === currentUserId) && (
+                    {isAdmin && (
                       <button
                         onClick={() => setConfirmDeletePollId(poll.id)}
                         style={{ ...secondaryButtonStyle, color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
@@ -203,23 +226,25 @@ export function PollsView() {
                     const voteCount = option.voterUserIds.length;
                     const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
                     const isSelected = selectedOptionId === option.id;
+                    const pricePerPerson = parseOptionPrice((option as { pricePerPerson?: unknown }).pricePerPerson);
                     const publicNames = users
                       .filter((user) => option.voterUserIds.includes(user.id))
                       .map((user) => user.name);
 
+                    const isVotingDisabled = poll.isClosed || !poll.isPublished;
                     return (
                       <button
                         key={option.id}
                         onClick={() => onVote(poll, option.id)}
-                        disabled={poll.isClosed}
+                        disabled={isVotingDisabled}
                         style={{
                           textAlign: "left",
                           border: `1px solid ${isSelected ? "var(--color-accent)" : "var(--color-border)"}`,
                           borderRadius: "var(--radius-md)",
                           background: "var(--color-bg-surface)",
                           padding: 10,
-                          cursor: poll.isClosed ? "not-allowed" : "pointer",
-                          opacity: poll.isClosed ? 0.85 : 1,
+                          cursor: isVotingDisabled ? "not-allowed" : "pointer",
+                          opacity: isVotingDisabled ? 0.85 : 1,
                         }}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -228,9 +253,9 @@ export function PollsView() {
                             {voteCount} ({pct}%)
                           </span>
                         </div>
-                        {typeof option.pricePerPerson === "number" && Number.isFinite(option.pricePerPerson) && (
+                        {pricePerPerson !== null && (
                           <p style={{ marginTop: 6, fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-                            ${option.pricePerPerson.toFixed(2)} / person
+                            ${pricePerPerson.toFixed(2)} / person
                           </p>
                         )}
                         {option.link && (
@@ -279,6 +304,11 @@ export function PollsView() {
                     );
                   })}
                 </div>
+                {!poll.isPublished && (
+                  <p style={{ marginTop: 8, fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
+                    This poll is in draft mode and not visible to guests.
+                  </p>
+                )}
               </Card>
             );
           })}
@@ -477,14 +507,24 @@ export function PollsView() {
                 Cancel
               </button>
               <button
-                onClick={onCreatePoll}
+                onClick={() => onCreatePoll(false)}
+                disabled={hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2}
+                style={{
+                  ...secondaryButtonStyle,
+                  opacity: hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2 ? 0.6 : 1,
+                }}
+              >
+                Save draft
+              </button>
+              <button
+                onClick={() => onCreatePoll(true)}
                 disabled={hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2}
                 style={{
                   ...primaryButtonStyle,
                   opacity: hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2 ? 0.6 : 1,
                 }}
               >
-                Create poll
+                Create & publish
               </button>
             </div>
           </div>
@@ -542,7 +582,7 @@ export function PollsView() {
 
       {!isAdmin && (
         <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
-          Only admins can create or close polls.
+          Only admins can create, publish, or close polls.
         </p>
       )}
     </div>

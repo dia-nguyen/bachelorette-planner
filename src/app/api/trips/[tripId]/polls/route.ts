@@ -12,10 +12,34 @@ const FIELD_MAP: Record<string, string> = {
   createdByUserId: "created_by_user_id",
   options: "options",
   isClosed: "is_closed",
+  isPublished: "is_published",
   visibility: "visibility",
   requiredUserIds: "required_user_ids",
   createdAt: "created_at",
 };
+
+function stripPublishField<T extends Record<string, unknown>>(poll: T): Omit<T, "is_published"> {
+  // Non-admin clients don't need visibility into publish state.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { is_published, ...rest } = poll;
+  return rest;
+}
+
+async function isTripAdmin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tripId: string,
+  userId: string,
+  role: string,
+) {
+  if (role === "MOH_ADMIN") return true;
+  const { data: tripRow, error } = await supabase
+    .from("trips")
+    .select("created_by")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (error) return false;
+  return tripRow?.created_by === userId;
+}
 
 function toDbPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -33,7 +57,7 @@ function stripUnsupportedPollColumns(
 ) {
   if (!message) return payload;
 
-  const unsupported = ["visibility", "required_user_ids"];
+  const unsupported = ["visibility", "required_user_ids", "is_published"];
   const lowered = message.toLowerCase();
   const cleaned = { ...payload };
   let removedAny = false;
@@ -99,11 +123,17 @@ export async function GET(
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const memberCheck = await assertTripMember(supabase, tripId, user.id);
     if (memberCheck instanceof NextResponse) return memberCheck;
+    const canManage = await isTripAdmin(supabase, tripId, user.id, memberCheck.role);
     const { data, error } = await supabase.from("polls").select("*").eq("trip_id", tripId);
     if (error) {
       return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
-    return NextResponse.json(data);
+    if (canManage) return NextResponse.json(data);
+
+    const visiblePolls = (data ?? [])
+      .filter((poll) => Boolean(poll.is_published ?? true))
+      .map(stripPublishField);
+    return NextResponse.json(visiblePolls);
   }
 
   const polls = demoRepository.getPolls(tripId);
@@ -125,11 +155,16 @@ export async function POST(
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const memberCheck = await assertTripMember(supabase, tripId, user.id);
     if (memberCheck instanceof NextResponse) return memberCheck;
+    const canManage = await isTripAdmin(supabase, tripId, user.id, memberCheck.role);
+    if (!canManage) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     const dbRow: Record<string, unknown> = {
       ...toDbPatch(body),
       trip_id: tripId,
     };
+    if (!("is_published" in dbRow)) {
+      dbRow.is_published = false;
+    }
 
     const { data, error } = await insertPollWithFallback(supabase, dbRow);
     if (error) {
@@ -166,13 +201,64 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const memberCheck = await assertTripMember(supabase, tripId, user.id);
     if (memberCheck instanceof NextResponse) return memberCheck;
+    const canManage = await isTripAdmin(supabase, tripId, user.id, memberCheck.role);
 
-    const dbPatch = toDbPatch(patch);
-    const { data, error } = await updatePollWithFallback(supabase, id, tripId, dbPatch);
+    if (canManage) {
+      const dbPatch = toDbPatch(patch);
+      const { data, error } = await updatePollWithFallback(supabase, id, tripId, dbPatch);
+      if (error) {
+        return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
+      }
+      return NextResponse.json(data);
+    }
+
+    const patchKeys = Object.keys(patch);
+    if (patchKeys.length !== 1 || patchKeys[0] !== "options") {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    const { data: existingPoll, error: existingError } = await supabase
+      .from("polls")
+      .select("id,options,is_closed,is_published")
+      .eq("id", id)
+      .eq("trip_id", tripId)
+      .maybeSingle();
+
+    if (existingError || !existingPoll) {
+      return NextResponse.json({ error: "Poll not found." }, { status: 404 });
+    }
+    if (existingPoll.is_closed || !Boolean(existingPoll.is_published ?? true)) {
+      return NextResponse.json({ error: "This poll is not open for voting." }, { status: 403 });
+    }
+
+    const previousOptions = Array.isArray(existingPoll.options) ? existingPoll.options : [];
+    const requestedOptions = Array.isArray(patch.options) ? patch.options : [];
+
+    const selectedOptionId = requestedOptions.find((option) => {
+      if (!option || typeof option !== "object") return false;
+      const typed = option as { id?: unknown; voterUserIds?: unknown };
+      return Array.isArray(typed.voterUserIds) && typed.voterUserIds.includes(user.id) && typeof typed.id === "string";
+    }) as { id: string } | undefined;
+
+    const selectedId = selectedOptionId?.id ?? null;
+    if (selectedId && !previousOptions.some((option) => option?.id === selectedId)) {
+      return NextResponse.json({ error: "Invalid vote option." }, { status: 400 });
+    }
+
+    const nextOptions = previousOptions.map((option) => {
+      const existingVoters = Array.isArray(option?.voterUserIds) ? option.voterUserIds as string[] : [];
+      const withoutMe = existingVoters.filter((voterId) => voterId !== user.id);
+      if (selectedId && option?.id === selectedId) {
+        return { ...option, voterUserIds: [...withoutMe, user.id] };
+      }
+      return { ...option, voterUserIds: withoutMe };
+    });
+
+    const { data, error } = await updatePollWithFallback(supabase, id, tripId, { options: nextOptions });
     if (error) {
       return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
     }
-    return NextResponse.json(data);
+    return NextResponse.json(stripPublishField(data));
   }
 
   demoRepository.updatePoll(id, patch);
@@ -198,6 +284,8 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const memberCheck = await assertTripMember(supabase, tripId, user.id);
     if (memberCheck instanceof NextResponse) return memberCheck;
+    const canManage = await isTripAdmin(supabase, tripId, user.id, memberCheck.role);
+    if (!canManage) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     const { error } = await supabase.from("polls").delete().eq("id", id).eq("trip_id", tripId);
     if (error) {

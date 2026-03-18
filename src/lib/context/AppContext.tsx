@@ -69,6 +69,7 @@ function normalizePoll(raw: Partial<Poll> & {
   createdByUserId: string;
   options: Poll["options"];
   isClosed: boolean;
+  isPublished?: boolean;
 }): Poll {
   const legacyPollLinks = Array.isArray((raw as { links?: unknown; }).links)
     ? ((raw as { links?: string[]; }).links ?? [])
@@ -83,6 +84,7 @@ function normalizePoll(raw: Partial<Poll> & {
   return {
     ...raw,
     options: normalizedOptions,
+    isPublished: raw.isPublished ?? true,
     visibility: raw.visibility === "anonymous" ? "anonymous" : "public",
     requiredUserIds: Array.isArray(raw.requiredUserIds) ? raw.requiredUserIds : [],
     createdAt: raw.createdAt ?? "1970-01-01T00:00:00.000Z",
@@ -98,6 +100,7 @@ function mapPollRow(row: any): Poll {
     createdByUserId: row.created_by_user_id ?? row.createdByUserId,
     options: (row.options ?? []) as Poll["options"],
     isClosed: Boolean(row.is_closed ?? row.isClosed),
+    isPublished: Boolean(row.is_published ?? row.isPublished ?? true),
     visibility: row.visibility as Poll["visibility"] | undefined,
     requiredUserIds: (row.required_user_ids ?? row.requiredUserIds ?? []) as string[],
     createdAt: row.created_at ?? row.createdAt,
@@ -671,16 +674,23 @@ export function AppProvider({ children }: { children: ReactNode; }) {
   const memberships = isSupabaseMode ? supabaseMemberships : demoMemberships;
   const users = isSupabaseMode ? supabaseUsers : demoUsers;
   const checklistItems = isSupabaseMode ? supabaseChecklistItems : demoChecklistItems;
-  const polls = (isSupabaseMode ? supabasePolls : demoPolls).map((poll) => normalizePoll(poll));
+  const effectiveRole: Role = useMemo(() => {
+    const m = memberships.find((mb) => mb.userId === effectiveCurrentUserId);
+    return m?.role ?? "GUEST_CONFIRMED";
+  }, [memberships, effectiveCurrentUserId]);
+  const polls = useMemo(() => {
+    const normalized = (isSupabaseMode ? supabasePolls : demoPolls).map((poll) => normalizePoll(poll));
+    if (effectiveRole === "MOH_ADMIN") return normalized;
+    return normalized
+      .filter((poll) => poll.isPublished)
+      .map((poll) => ({ ...poll, isPublished: true }));
+  }, [isSupabaseMode, supabasePolls, demoPolls, effectiveRole]);
   const photos = isSupabaseMode ? supabasePhotos : demoPhotos;
   const moodboardNotes = isSupabaseMode ? supabaseMoodboardNotes : demoMoodboardNotes;
 
   const guestFieldSchema: GuestFieldDef[] = trip?.guestFieldSchema ?? [];
 
-  const currentRole: Role = useMemo(() => {
-    const m = memberships.find((mb) => mb.userId === effectiveCurrentUserId);
-    return m?.role ?? "GUEST_CONFIRMED";
-  }, [memberships, effectiveCurrentUserId]);
+  const currentRole: Role = effectiveRole;
   const moodboardRequestChainsRef = useRef(new Map<string, Promise<void>>());
 
   const queueMoodboardRequest = useCallback(

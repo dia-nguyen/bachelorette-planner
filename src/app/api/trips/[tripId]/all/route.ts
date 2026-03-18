@@ -27,6 +27,7 @@ export async function GET(
 
   const memberCheck = await assertTripMember(supabase, tripId, user.id);
   if (memberCheck instanceof NextResponse) return memberCheck;
+  const isAdmin = memberCheck.role === "MOH_ADMIN";
 
   // Run queries in two small batches to stay within connection limits.
   const [tripRes, membershipsRes, eventsRes, tasksRes] = await Promise.all([
@@ -66,6 +67,18 @@ export async function GET(
     profiles = (users ?? []) as Record<string, unknown>[];
   }
 
+  const polls = (pollsRes.data ?? []) as Array<Record<string, unknown>>;
+  const pollRows = isAdmin
+    ? polls
+    : polls
+      .filter((poll) => Boolean(poll.is_published ?? true))
+      .map((poll) => {
+        // Non-admin payload omits publish-state metadata.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { is_published, ...rest } = poll;
+        return rest;
+      });
+
   return NextResponse.json({
     trip: tripRes.data,
     memberships: membershipsRes.data ?? [],
@@ -73,7 +86,7 @@ export async function GET(
     tasks: tasksRes.data ?? [],
     budgetItems: budgetRes.data ?? [],
     checklistItems: checklistRes.data ?? [],
-    polls: pollsRes.data ?? [],
+    polls: pollRows,
     photos: photosRes.data ?? [],
     profiles,
   });
