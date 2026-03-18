@@ -89,6 +89,16 @@ function isUserInvolved(
   return false;
 }
 
+function formatPossessive(name: string): string {
+  return name.endsWith("s") ? `${name}'` : `${name}'s`;
+}
+
+function getNetLabel(net: number): string {
+  if (net > 0) return "Net Credit";
+  if (net < 0) return "Net Owed";
+  return "Settled";
+}
+
 export function BudgetView() {
   const { budgetItems, users, events, openPanel } = useApp();
   const participantValues = useMemo(() => users.map((user) => user.id), [users]);
@@ -210,6 +220,8 @@ export function BudgetView() {
   }, [displayedItems, events, summaryUserId, validUserIds]);
 
   const selectedUser = users.find((u) => u.id === summaryUserId);
+  const shareColumnLabel = selectedUser ? `${formatPossessive(selectedUser.name)} Share` : "Participant Share";
+  const netLabel = personSummary ? getNetLabel(personSummary.net) : "Net Position";
   const toggleSort = (field: "title" | "category" | "planned" | "actual" | "paidBy" | "status") => {
     if (sortField === field) {
       setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
@@ -294,15 +306,15 @@ export function BudgetView() {
               <p style={{ fontSize: 22, fontWeight: 700 }}>{formatCurrency(personSummary.plannedShare)}</p>
             </div>
             <div>
-              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Owes</p>
+              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Actual Share</p>
               <p style={{ fontSize: 22, fontWeight: 700, color: personSummary.owes > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>{formatCurrency(personSummary.owes)}</p>
             </div>
             <div>
-              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Paid</p>
+              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Paid Out</p>
               <p style={{ fontSize: 22, fontWeight: 700, color: "var(--color-accent)" }}>{formatCurrency(personSummary.paid)}</p>
             </div>
             <div>
-              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>Net Balance</p>
+              <p style={{ fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>{netLabel}</p>
               <p style={{ fontSize: 22, fontWeight: 700, color: personSummary.net >= 0 ? "#10B981" : "#EF4444" }}>
                 {personSummary.net >= 0 ? "+" : ""}{formatCurrency(personSummary.net)}
               </p>
@@ -351,7 +363,7 @@ export function BudgetView() {
                     Status{renderSortArrow("status", sortField, sortDirection)}
                   </button>
                 </th>
-                {summaryUserId && <th style={headCellSt}>Your Share</th>}
+                {summaryUserId && <th style={headCellSt}>{shareColumnLabel}</th>}
               </tr>
             </thead>
             <tbody>
