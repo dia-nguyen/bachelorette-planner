@@ -32,6 +32,13 @@ function formatCompactTime(date: Date) {
     .replace(" ", "\u00A0");
 }
 
+function addHoursToLocalDatetime(localDatetime: string, hours: number): string {
+  const parsed = new Date(localDatetime);
+  if (Number.isNaN(parsed.getTime())) return localDatetime;
+  parsed.setHours(parsed.getHours() + hours);
+  return toLocalDatetime(parsed.toISOString());
+}
+
 export function EventDetail({
   event,
   budgetItem,
@@ -152,8 +159,8 @@ export function EventDetail({
                 setDraft((d) => ({
                   ...d,
                   startAt: newStart,
-                  // if end is empty or before the new start, snap it to start
-                  endAt: d.endAt && d.endAt >= newStart ? d.endAt : newStart,
+                  // if end is empty or before the new start, keep it at least 1 hour after start
+                  endAt: d.endAt && d.endAt >= newStart ? d.endAt : addHoursToLocalDatetime(newStart, 1),
                 }));
               }}
               style={inputStyle}
@@ -165,6 +172,11 @@ export function EventDetail({
               type="datetime-local"
               value={draft.endAt}
               min={draft.startAt}
+              onFocus={() => {
+                if (!draft.endAt && draft.startAt) {
+                  setDraft((d) => ({ ...d, endAt: addHoursToLocalDatetime(d.startAt, 1) }));
+                }
+              }}
               onChange={(e) => setDraft((d) => ({ ...d, endAt: e.target.value }))}
               style={inputStyle}
             />

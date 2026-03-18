@@ -19,7 +19,7 @@ interface PlanActivityFormProps {
 }
 
 export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
-  const { users, memberships, planActivity } = useApp();
+  const { users, memberships, planActivity, trip } = useApp();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -69,6 +69,44 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
   const [budgetNotes, setBudgetNotes] = useState("");
 
   const acceptedUsers = users;
+
+  const formatForDatetimeLocal = (date: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  const addHoursToLocalDatetime = (localDatetime: string, hours: number): string => {
+    const parsed = new Date(localDatetime);
+    if (Number.isNaN(parsed.getTime())) return localDatetime;
+    parsed.setHours(parsed.getHours() + hours);
+    return formatForDatetimeLocal(parsed);
+  };
+
+  const getDefaultEventStart = (): string => {
+    if (trip?.startAt) {
+      const tripStart = new Date(trip.startAt);
+      if (!Number.isNaN(tripStart.getTime())) {
+        tripStart.setHours(12, 0, 0, 0);
+        return formatForDatetimeLocal(tripStart);
+      }
+    }
+    const fallback = new Date();
+    fallback.setMinutes(0, 0, 0);
+    fallback.setHours(fallback.getHours() + 1);
+    return formatForDatetimeLocal(fallback);
+  };
+
+  const ensureInitialEventDates = () => {
+    if (eventStartAt) return;
+    const defaultStart = getDefaultEventStart();
+    setEventStartAt(defaultStart);
+    setEventEndAt((prev) => prev || addHoursToLocalDatetime(defaultStart, 1));
+  };
+
+  const handleEventStartChange = (newStart: string) => {
+    setEventStartAt(newStart);
+    setEventEndAt((prev) => (!prev || prev < newStart ? addHoursToLocalDatetime(newStart, 1) : prev));
+  };
 
   const toggleAttendee = (userId: string) => {
     setEventAttendees((prev) =>
@@ -274,11 +312,27 @@ export function PlanActivityForm({ onClose }: PlanActivityFormProps) {
               </label>
               <label style={labelStyle}>
                 Start
-                <input type="datetime-local" value={eventStartAt} onChange={(e) => setEventStartAt(e.target.value)} style={inputStyle} />
+                <input
+                  type="datetime-local"
+                  value={eventStartAt}
+                  onFocus={ensureInitialEventDates}
+                  onChange={(e) => handleEventStartChange(e.target.value)}
+                  style={inputStyle}
+                />
               </label>
               <label style={labelStyle}>
                 End
-                <input type="datetime-local" value={eventEndAt} onChange={(e) => setEventEndAt(e.target.value)} style={inputStyle} />
+                <input
+                  type="datetime-local"
+                  value={eventEndAt}
+                  min={eventStartAt || undefined}
+                  onFocus={() => {
+                    if (!eventStartAt) ensureInitialEventDates();
+                    else if (!eventEndAt) setEventEndAt(addHoursToLocalDatetime(eventStartAt, 1));
+                  }}
+                  onChange={(e) => setEventEndAt(e.target.value)}
+                  style={inputStyle}
+                />
               </label>
             </div>
 
@@ -712,7 +766,7 @@ const inputStyle: React.CSSProperties = {
   padding: "8px 12px",
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
-  fontSize: "16px",
+  fontSize: "var(--font-md)",
 };
 
 const sectionStyle: React.CSSProperties = {

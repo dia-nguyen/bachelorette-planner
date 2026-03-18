@@ -562,7 +562,7 @@ export function AppShell() {
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 100,
+            zIndex: 220,
             background: "rgba(0,0,0,0.4)",
             display: "flex",
             alignItems: "center",

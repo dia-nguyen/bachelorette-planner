@@ -823,7 +823,7 @@ const inputStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
-  fontSize: "16px",
+  fontSize: "var(--font-md)",
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
