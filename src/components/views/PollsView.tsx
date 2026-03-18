@@ -29,10 +29,69 @@ function toHref(url: string): string {
 
 function parseOptionPrice(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object") {
+    const typed = value as { min?: unknown; max?: unknown };
+    if (typeof typed.min === "number" && Number.isFinite(typed.min)) return typed.min;
+  }
   if (typeof value === "string" && value.trim()) {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
+  return null;
+}
+
+function parsePriceInput(rawValue: string): {
+  isValid: boolean;
+  pricePerPerson?: number;
+  pricePerPersonMin?: number;
+  pricePerPersonMax?: number;
+} {
+  const raw = rawValue.trim();
+  if (!raw) return { isValid: true };
+
+  const rangeMatch = raw.match(/^([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)$/);
+  if (rangeMatch) {
+    const min = Number.parseFloat(rangeMatch[1]);
+    const max = Number.parseFloat(rangeMatch[2]);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+      return { isValid: false };
+    }
+    return { isValid: true, pricePerPersonMin: min, pricePerPersonMax: max };
+  }
+
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) return { isValid: false };
+  return { isValid: true, pricePerPerson: parsed };
+}
+
+function getPriceInputValue(option: {
+  pricePerPerson?: unknown;
+  pricePerPersonMin?: unknown;
+  pricePerPersonMax?: unknown;
+}): string {
+  const min = typeof option.pricePerPersonMin === "number" ? option.pricePerPersonMin : null;
+  const max = typeof option.pricePerPersonMax === "number" ? option.pricePerPersonMax : null;
+  if (min !== null && max !== null) return `${min}-${max}`;
+  const single = parseOptionPrice(option.pricePerPerson);
+  return single === null ? "" : String(single);
+}
+
+function getPriceDisplay(option: {
+  pricePerPerson?: unknown;
+  pricePerPersonMin?: unknown;
+  pricePerPersonMax?: unknown;
+}): string | null {
+  const min = typeof option.pricePerPersonMin === "number" && Number.isFinite(option.pricePerPersonMin)
+    ? option.pricePerPersonMin
+    : null;
+  const max = typeof option.pricePerPersonMax === "number" && Number.isFinite(option.pricePerPersonMax)
+    ? option.pricePerPersonMax
+    : null;
+  if (min !== null && max !== null) {
+    return `$${min.toFixed(2)} - $${max.toFixed(2)} / person`;
+  }
+  const single = parseOptionPrice(option.pricePerPerson);
+  if (single !== null) return `$${single.toFixed(2)} / person`;
   return null;
 }
 
@@ -49,10 +108,11 @@ export function PollsView() {
 
   const isAdmin = currentRole === "MOH_ADMIN";
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingPollId, setEditingPollId] = useState<string | null>(null);
   const [confirmDeletePollId, setConfirmDeletePollId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [visibility, setVisibility] = useState<PollVisibility>("public");
-  const [options, setOptions] = useState<Array<{ label: string; link: string; pricePerPerson: string }>>([
+  const [options, setOptions] = useState<Array<{ id?: string; label: string; link: string; pricePerPerson: string }>>([
     { label: "", link: "", pricePerPerson: "" },
     { label: "", link: "", pricePerPerson: "" },
   ]);
@@ -71,11 +131,15 @@ export function PollsView() {
     [users, requiredUserIds],
   );
   const hasInvalidPrice = options.some((option) => {
-    const raw = option.pricePerPerson.trim();
-    return raw !== "" && !Number.isFinite(Number.parseFloat(raw));
+    const parsed = parsePriceInput(option.pricePerPerson);
+    return !parsed.isValid;
   });
+  const isEditing = editingPollId !== null;
+  const minOptionsCount = options.map((opt) => opt.label.trim()).filter(Boolean).length;
+  const isPollFormInvalid = hasInvalidPrice || !question.trim() || minOptionsCount < 2;
 
   const resetCreateForm = () => {
+    setEditingPollId(null);
     setQuestion("");
     setVisibility("public");
     setOptions([
@@ -85,19 +149,48 @@ export function PollsView() {
     setRequiredUserIds([]);
   };
 
+  const closePollModal = () => {
+    setShowCreateModal(false);
+    resetCreateForm();
+  };
+
+  const onOpenCreateModal = () => {
+    resetCreateForm();
+    setShowCreateModal(true);
+  };
+
+  const onOpenEditModal = (poll: Poll) => {
+    setEditingPollId(poll.id);
+    setQuestion(poll.question);
+    setVisibility(poll.visibility);
+    setRequiredUserIds([...poll.requiredUserIds]);
+    setOptions(
+      poll.options.map((option) => ({
+        id: option.id,
+        label: option.label,
+        link: option.link ?? "",
+        pricePerPerson: getPriceInputValue(option as {
+          pricePerPerson?: unknown;
+          pricePerPersonMin?: unknown;
+          pricePerPersonMax?: unknown;
+        }),
+      })),
+    );
+    setShowCreateModal(true);
+  };
+
   const onCreatePoll = (isPublished: boolean) => {
     const cleanQuestion = question.trim();
     const cleanOptions = options
       .map((option) => ({
+        ...parsePriceInput(option.pricePerPerson),
         id: makeOptionId(),
         label: option.label.trim(),
         voterUserIds: [],
         link: option.link.trim() ? toHref(option.link) : undefined,
-        pricePerPerson: option.pricePerPerson.trim()
-          ? Number.parseFloat(option.pricePerPerson)
-          : undefined,
       }))
-      .filter((option) => option.label && (option.pricePerPerson === undefined || Number.isFinite(option.pricePerPerson)));
+      .filter((option) => option.label && option.isValid)
+      .map(({ isValid: _isValid, ...option }) => option);
 
     if (!isAdmin || !cleanQuestion || cleanOptions.length < 2) return;
 
@@ -114,6 +207,39 @@ export function PollsView() {
 
     resetCreateForm();
     setShowCreateModal(false);
+  };
+
+  const onSavePollEdits = () => {
+    if (!isAdmin || !editingPollId) return;
+    const sourcePoll = polls.find((poll) => poll.id === editingPollId);
+    if (!sourcePoll) return;
+
+    const existingById = new Map(sourcePoll.options.map((option) => [option.id, option]));
+    const cleanQuestion = question.trim();
+    const cleanOptions = options
+      .map((option) => {
+        const id = option.id ?? makeOptionId();
+        const existing = existingById.get(id);
+        return {
+          ...parsePriceInput(option.pricePerPerson),
+          id,
+          label: option.label.trim(),
+          voterUserIds: existing?.voterUserIds ?? [],
+          link: option.link.trim() ? toHref(option.link) : undefined,
+        };
+      })
+      .filter((option) => option.label && option.isValid)
+      .map(({ isValid: _isValid, ...option }) => option);
+
+    if (!cleanQuestion || cleanOptions.length < 2) return;
+
+    updatePoll(editingPollId, {
+      question: cleanQuestion,
+      options: cleanOptions,
+      visibility,
+      requiredUserIds,
+    });
+    closePollModal();
   };
 
   const onVote = (poll: Poll, optionId: string) => {
@@ -140,7 +266,7 @@ export function PollsView() {
         </div>
         {isAdmin && (
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={onOpenCreateModal}
             style={primaryButtonStyle}
           >
             Create poll
@@ -196,6 +322,14 @@ export function PollsView() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {isAdmin && (
                       <button
+                        onClick={() => onOpenEditModal(poll)}
+                        style={secondaryButtonStyle}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
                         onClick={() => updatePoll(poll.id, { isPublished: !poll.isPublished })}
                         style={secondaryButtonStyle}
                       >
@@ -226,7 +360,11 @@ export function PollsView() {
                     const voteCount = option.voterUserIds.length;
                     const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
                     const isSelected = selectedOptionId === option.id;
-                    const pricePerPerson = parseOptionPrice((option as { pricePerPerson?: unknown }).pricePerPerson);
+                    const priceDisplay = getPriceDisplay(option as {
+                      pricePerPerson?: unknown;
+                      pricePerPersonMin?: unknown;
+                      pricePerPersonMax?: unknown;
+                    });
                     const publicNames = users
                       .filter((user) => option.voterUserIds.includes(user.id))
                       .map((user) => user.name);
@@ -253,9 +391,9 @@ export function PollsView() {
                             {voteCount} ({pct}%)
                           </span>
                         </div>
-                        {pricePerPerson !== null && (
+                        {priceDisplay && (
                           <p style={{ marginTop: 6, fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
-                            ${pricePerPerson.toFixed(2)} / person
+                            {priceDisplay}
                           </p>
                         )}
                         {option.link && (
@@ -317,10 +455,7 @@ export function PollsView() {
 
       {showCreateModal && isAdmin && (
         <div
-          onClick={() => {
-            setShowCreateModal(false);
-            resetCreateForm();
-          }}
+          onClick={closePollModal}
           style={{
             position: "fixed",
             inset: 0,
@@ -354,12 +489,11 @@ export function PollsView() {
                 padding: "14px 18px",
               }}
             >
-              <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700 }}>Create Poll</h3>
+              <h3 style={{ fontSize: "var(--font-lg)", fontWeight: 700 }}>
+                {isEditing ? "Edit Poll" : "Create Poll"}
+              </h3>
               <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  resetCreateForm();
-                }}
+                onClick={closePollModal}
                 style={{ ...secondaryButtonStyle, lineHeight: 1, paddingInline: 12 }}
               >
                 Close
@@ -390,7 +524,7 @@ export function PollsView() {
                 <p style={{ fontSize: "var(--font-sm)", fontWeight: 600, marginBottom: 6 }}>Options</p>
                 <div className="flex flex-col gap-2">
                   {options.map((option, idx) => (
-                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div key={option.id ?? idx} className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <div className="grid gap-2 w-full sm:grid-cols-2 md:grid-cols-3" style={{ flex: 1 }}>
                         <input
                           value={option.label}
@@ -405,12 +539,9 @@ export function PollsView() {
                           style={{ ...inputStyle, marginTop: 0 }}
                         />
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
                           value={option.pricePerPerson}
                           onChange={(e) => setOptions((prev) => prev.map((item, i) => i === idx ? { ...item, pricePerPerson: e.target.value } : item))}
-                          placeholder="Price / person"
+                          placeholder="Price / person (e.g. 45 or 45-70)"
                           style={{ ...inputStyle, marginTop: 0 }}
                         />
                       </div>
@@ -425,7 +556,7 @@ export function PollsView() {
                     </div>
                   ))}
                   <button
-                    onClick={() => setOptions((prev) => [...prev, { label: "", link: "", pricePerPerson: "" }])}
+                    onClick={() => setOptions((prev) => [...prev, { id: makeOptionId(), label: "", link: "", pricePerPerson: "" }])}
                     style={secondaryButtonStyle}
                   >
                     + Add option
@@ -498,34 +629,46 @@ export function PollsView() {
               }}
             >
               <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  resetCreateForm();
-                }}
+                onClick={closePollModal}
                 style={secondaryButtonStyle}
               >
                 Cancel
               </button>
-              <button
-                onClick={() => onCreatePoll(false)}
-                disabled={hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2}
-                style={{
-                  ...secondaryButtonStyle,
-                  opacity: hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2 ? 0.6 : 1,
-                }}
-              >
-                Save draft
-              </button>
-              <button
-                onClick={() => onCreatePoll(true)}
-                disabled={hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2}
-                style={{
-                  ...primaryButtonStyle,
-                  opacity: hasInvalidPrice || !question.trim() || options.map((opt) => opt.label.trim()).filter(Boolean).length < 2 ? 0.6 : 1,
-                }}
-              >
-                Create & publish
-              </button>
+              {isEditing ? (
+                <button
+                  onClick={onSavePollEdits}
+                  disabled={isPollFormInvalid}
+                  style={{
+                    ...primaryButtonStyle,
+                    opacity: isPollFormInvalid ? 0.6 : 1,
+                  }}
+                >
+                  Save changes
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onCreatePoll(false)}
+                    disabled={isPollFormInvalid}
+                    style={{
+                      ...secondaryButtonStyle,
+                      opacity: isPollFormInvalid ? 0.6 : 1,
+                    }}
+                  >
+                    Save draft
+                  </button>
+                  <button
+                    onClick={() => onCreatePoll(true)}
+                    disabled={isPollFormInvalid}
+                    style={{
+                      ...primaryButtonStyle,
+                      opacity: isPollFormInvalid ? 0.6 : 1,
+                    }}
+                  >
+                    Create & publish
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
