@@ -11,50 +11,48 @@ interface KPICardsProps {
 
 export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-      {/* Days + Tasks Completed */}
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      {/* Days Until Trip */}
       <Card className="order-1 md:order-none" style={{ padding: "12px 14px", minHeight: 108 }}>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
-              Days until trip
-            </p>
-            <p style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
-              {kpis.daysToGo}
-            </p>
-          </div>
-          <div>
-            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
-              Tasks completed
-            </p>
-            <p style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
-              {kpis.tasksCompletionPercent}%
-            </p>
-            <div
-              style={{
-                marginTop: 8,
-                height: 6,
-                borderRadius: "var(--radius-pill)",
-                background: "var(--color-bg-muted)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${kpis.tasksCompletionPercent}%`,
-                  borderRadius: "var(--radius-pill)",
-                  background: "var(--color-accent)",
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </div>
-          </div>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+          Days until trip
+        </p>
+        <p style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
+          {kpis.daysToGo}
+        </p>
+      </Card>
+
+      {/* Tasks Completed */}
+      <Card className="order-2 md:order-none" style={{ padding: "12px 14px", minHeight: 108 }}>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+          Tasks completed
+        </p>
+        <p style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
+          {kpis.tasksCompletionPercent}%
+        </p>
+        <div
+          style={{
+            marginTop: 8,
+            height: 6,
+            borderRadius: "var(--radius-pill)",
+            background: "var(--color-bg-muted)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${kpis.tasksCompletionPercent}%`,
+              borderRadius: "var(--radius-pill)",
+              background: "var(--color-accent)",
+              transition: "width 0.3s ease",
+            }}
+          />
         </div>
       </Card>
 
       {/* Task Status */}
-      <Card className="order-3 md:order-none" style={{ padding: "12px 14px", minHeight: 108 }}>
+      <Card className="order-3 md:order-none col-span-2 md:col-span-1" style={{ padding: "12px 14px", minHeight: 108 }}>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
           Task Status
         </p>
@@ -78,7 +76,7 @@ export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
       </Card>
 
       {/* Budget Remaining */}
-      <Card className="order-4 md:order-none" style={{ padding: "12px 14px", minHeight: 108 }}>
+      <Card className="order-4 md:order-none col-span-2 md:col-span-1" style={{ padding: "12px 14px", minHeight: 108 }}>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
           Budget remaining
         </p>

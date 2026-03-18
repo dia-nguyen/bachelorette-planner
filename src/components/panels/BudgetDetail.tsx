@@ -109,6 +109,27 @@ export function BudgetDetail({
     return allUsers.filter((u) => draft.splitAttendeeUserIds.includes(u.id));
   })();
   const editAttendeeCount = editAttendees.length;
+  const getDraftAttendeeCount = (d: typeof draft): number => {
+    if (d.relatedEventId) {
+      const ev = allEvents.find((e) => e.id === d.relatedEventId);
+      return ev?.attendeeUserIds?.length ?? 0;
+    }
+    return d.splitAttendeeUserIds.length;
+  };
+  const rescaleDraftForPerPersonEven = (
+    d: typeof draft,
+    nextCount: number,
+    previousCount: number,
+  ): typeof draft => {
+    if (!(d.costMode === "per_person" && d.splitType === "even")) return d;
+    const prev = previousCount > 0 ? previousCount : 1;
+    const next = nextCount > 0 ? nextCount : 1;
+    return {
+      ...d,
+      plannedAmount: (d.plannedAmount / prev) * next,
+      actualAmount: (d.actualAmount / prev) * next,
+    };
+  };
 
   const setPlannedSplit = (userId: string, val: number) =>
     setDraft((d) => {
@@ -237,12 +258,14 @@ export function BudgetDetail({
                     <button
                       key={u.id}
                       type="button"
-                      onClick={() => setDraft((d) => ({
-                        ...d,
-                        splitAttendeeUserIds: selected
+                      onClick={() => setDraft((d) => {
+                        const previousCount = getDraftAttendeeCount(d);
+                        const nextIds = selected
                           ? d.splitAttendeeUserIds.filter((id) => id !== u.id)
-                          : [...d.splitAttendeeUserIds, u.id],
-                      }))}
+                          : [...d.splitAttendeeUserIds, u.id];
+                        const nextDraft = { ...d, splitAttendeeUserIds: nextIds };
+                        return rescaleDraftForPerPersonEven(nextDraft, nextIds.length, previousCount);
+                      })}
                       style={{
                         padding: "4px 10px",
                         borderRadius: "var(--radius-pill)",
@@ -336,12 +359,14 @@ export function BudgetDetail({
                         <button
                           key={u.id}
                           type="button"
-                          onClick={() => setDraft((d) => ({
-                            ...d,
-                            splitAttendeeUserIds: selected
+                          onClick={() => setDraft((d) => {
+                            const previousCount = getDraftAttendeeCount(d);
+                            const nextIds = selected
                               ? d.splitAttendeeUserIds.filter((id) => id !== u.id)
-                              : [...d.splitAttendeeUserIds, u.id],
-                          }))}
+                              : [...d.splitAttendeeUserIds, u.id];
+                            const nextDraft = { ...d, splitAttendeeUserIds: nextIds };
+                            return rescaleDraftForPerPersonEven(nextDraft, nextIds.length, previousCount);
+                          })}
                           style={{
                             padding: "4px 10px",
                             borderRadius: "var(--radius-pill)",
@@ -452,7 +477,17 @@ export function BudgetDetail({
             Link to Event
             <select
               value={draft.relatedEventId}
-              onChange={(e) => setDraft({ ...draft, relatedEventId: e.target.value })}
+              onChange={(e) => {
+                const nextEventId = e.target.value;
+                setDraft((d) => {
+                  const previousCount = getDraftAttendeeCount(d);
+                  const nextCount = nextEventId
+                    ? (allEvents.find((ev) => ev.id === nextEventId)?.attendeeUserIds?.length ?? 0)
+                    : d.splitAttendeeUserIds.length;
+                  const nextDraft = { ...d, relatedEventId: nextEventId };
+                  return rescaleDraftForPerPersonEven(nextDraft, nextCount, previousCount);
+                });
+              }}
               style={inputStyle}
             >
               <option value="">None</option>

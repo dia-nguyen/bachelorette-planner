@@ -297,7 +297,13 @@ export function TasksView() {
 
   // ---- Kanban view ----
   const kanbanView = (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ alignItems: "start" }}>
+    <div
+      className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+      style={{
+        alignItems: "stretch",
+        minHeight: "calc(100dvh - 260px)",
+      }}
+    >
       {(["TODO", "IN_PROGRESS", "DONE"] as const).map((statusKey) => {
         const isOver = overColumn === statusKey;
         return (
@@ -312,7 +318,9 @@ export function TasksView() {
               transition: "background 0.15s",
               background: isOver ? "var(--color-accent-soft)" : "transparent",
               outline: isOver ? "2px dashed var(--color-accent)" : "2px dashed transparent",
-              minHeight: 80,
+              minHeight: "100%",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <div className="flex items-center gap-2 mb-3">
@@ -322,7 +330,7 @@ export function TasksView() {
                 {grouped[statusKey].length}
               </span>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2" style={{ flex: 1 }}>
               {grouped[statusKey].map((task) => (
                 <TaskCard
                   key={task.id}
@@ -338,6 +346,12 @@ export function TasksView() {
                 <div style={{ height: 64, borderRadius: "var(--radius-md)", border: "2px dashed var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)", fontSize: "var(--font-sm)" }}>
                   Drop here
                 </div>
+              )}
+              {grouped[statusKey].length > 0 && (
+                <div
+                  aria-hidden
+                  style={{ flex: 1, borderRadius: "var(--radius-md)" }}
+                />
               )}
             </div>
           </div>

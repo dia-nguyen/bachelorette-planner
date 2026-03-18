@@ -104,6 +104,12 @@ function mapPollRow(row: any): Poll {
   });
 }
 
+function rescalePerPersonEvenAmount(totalAmount: number, previousCount: number, nextCount: number): number {
+  const prev = previousCount > 0 ? previousCount : 1;
+  const next = nextCount > 0 ? nextCount : 1;
+  return (totalAmount / prev) * next;
+}
+
 interface SupabaseTripDataPayload {
   trip?: Record<string, unknown>;
   memberships?: Array<Record<string, unknown>>;
@@ -974,21 +980,65 @@ export function AppProvider({ children }: { children: ReactNode; }) {
       const normalizedPatch = patch.attendeeUserIds
         ? { ...patch, attendeeUserIds: uniqueIds(patch.attendeeUserIds, validUserIds) }
         : patch;
+      const oldEvent = events.find((e) => e.id === id);
+      const previousAttendeeCount = oldEvent?.attendeeUserIds?.length ?? 0;
+      const nextAttendeeCount = normalizedPatch.attendeeUserIds?.length;
+      const shouldRescaleLinkedPerPersonItems =
+        nextAttendeeCount != null && nextAttendeeCount !== previousAttendeeCount;
+      const linkedPerPersonEvenItems = shouldRescaleLinkedPerPersonItems
+        ? budgetItems.filter((item) =>
+          item.relatedEventId === id
+          && item.splitType === "even"
+          && item.costMode === "per_person")
+        : [];
 
       if (isSupabaseMode && activeTripId) {
         setSupabaseEvents((prev) =>
           prev.map((e) => e.id === id ? { ...e, ...normalizedPatch } : e)
         );
+        if (linkedPerPersonEvenItems.length > 0 && nextAttendeeCount != null) {
+          setSupabaseBudgetItems((prev) => prev.map((item) => {
+            if (!linkedPerPersonEvenItems.some((linked) => linked.id === item.id)) return item;
+            return {
+              ...item,
+              plannedAmount: rescalePerPersonEvenAmount(item.plannedAmount, previousAttendeeCount, nextAttendeeCount),
+              actualAmount: rescalePerPersonEvenAmount(item.actualAmount, previousAttendeeCount, nextAttendeeCount),
+            };
+          }));
+        }
         void fetch(`/api/trips/${activeTripId}/events`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, patch: normalizedPatch }),
         });
+        if (linkedPerPersonEvenItems.length > 0 && nextAttendeeCount != null) {
+          linkedPerPersonEvenItems.forEach((item) => {
+            void fetch(`/api/trips/${activeTripId}/budget`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: item.id,
+                patch: {
+                  plannedAmount: rescalePerPersonEvenAmount(item.plannedAmount, previousAttendeeCount, nextAttendeeCount),
+                  actualAmount: rescalePerPersonEvenAmount(item.actualAmount, previousAttendeeCount, nextAttendeeCount),
+                },
+              }),
+            });
+          });
+        }
         return;
       }
       repo.updateEvent(id, normalizedPatch);
+      if (linkedPerPersonEvenItems.length > 0 && nextAttendeeCount != null) {
+        linkedPerPersonEvenItems.forEach((item) => {
+          repo.updateBudgetItem(item.id, {
+            plannedAmount: rescalePerPersonEvenAmount(item.plannedAmount, previousAttendeeCount, nextAttendeeCount),
+            actualAmount: rescalePerPersonEvenAmount(item.actualAmount, previousAttendeeCount, nextAttendeeCount),
+          });
+        });
+      }
     },
-    [isSupabaseMode, activeTripId, memberships]
+    [isSupabaseMode, activeTripId, memberships, events, budgetItems]
   );
   const deleteEvent = useCallback(
     (id: string) => {
