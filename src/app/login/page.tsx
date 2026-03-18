@@ -72,7 +72,7 @@ function LoginForm() {
         <div style={{ textAlign: "center", marginBottom: 32 }}>
 
           <div style={{ width: 56, height: 56, borderRadius: "var(--radius-md)", background: "var(--color-accent)", color: "#fff", fontWeight: 700, fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-            <Image src={`/bach-party-logo.png`} alt={"Bachelorette Party Planner Icon"} width={200} height={200} />
+            <Image src={`/app-icon.png`} alt={"Bachelorette Party Planner Icon"} width={200} height={200} />
           </div>
           <h1 style={{ fontSize: "var(--font-2xl)", fontWeight: 700, marginBottom: 8 }}>Bachelorette Planner</h1>
           <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>

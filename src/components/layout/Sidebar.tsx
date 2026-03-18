@@ -229,7 +229,7 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
           }}
           onClick={() => setSwitcherOpen((o) => !o)}
         >
-          <Image src={`/bach-party-logo.png`} alt={trip?.name ?? "Bachelorette Party Planner Icon"} width={200} height={200} />
+          <Image src={`/app-icon.png`} alt={trip?.name ?? "Bachelorette Party Planner Icon"} width={200} height={200} />
         </button>
 
         {/* Dropdown */}

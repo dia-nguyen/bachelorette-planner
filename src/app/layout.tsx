@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "Plan the perfect bachelorette weekend — budget, events, tasks, guests.",
   icons: {
     icon: "/favicon.png",
-    apple: "/favicon.png",
+    apple: "/app-icon.png",
   }
 };
 
