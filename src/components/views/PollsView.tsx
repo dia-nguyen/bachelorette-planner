@@ -11,9 +11,10 @@ function didUserVote(poll: Poll, userId: string): boolean {
   return poll.options.some((option) => option.voterUserIds.includes(userId));
 }
 
-function getUserVoteOptionId(poll: Poll, userId: string): string | null {
-  const voted = poll.options.find((option) => option.voterUserIds.includes(userId));
-  return voted?.id ?? null;
+function getUserVoteOptionIds(poll: Poll, userId: string): string[] {
+  return poll.options
+    .filter((option) => option.voterUserIds.includes(userId))
+    .map((option) => option.id);
 }
 
 function makeOptionId() {
@@ -48,8 +49,14 @@ function parsePriceInput(rawValue: string): {
 } {
   const raw = rawValue.trim();
   if (!raw) return { isValid: true };
+  const normalized = raw
+    .replace(/[–—]/g, "-")
+    .replace(/\$/g, "")
+    .replace(/,/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const rangeMatch = raw.match(/^([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)$/);
+  const rangeMatch = normalized.match(/^([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)$/);
   if (rangeMatch) {
     const min = Number.parseFloat(rangeMatch[1]);
     const max = Number.parseFloat(rangeMatch[2]);
@@ -59,7 +66,7 @@ function parsePriceInput(rawValue: string): {
     return { isValid: true, pricePerPersonMin: min, pricePerPersonMax: max };
   }
 
-  const parsed = Number.parseFloat(raw);
+  const parsed = Number.parseFloat(normalized);
   if (!Number.isFinite(parsed)) return { isValid: false };
   return { isValid: true, pricePerPerson: parsed };
 }
@@ -112,6 +119,8 @@ export function PollsView() {
   const [confirmDeletePollId, setConfirmDeletePollId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [visibility, setVisibility] = useState<PollVisibility>("public");
+  const [voteLimitMode, setVoteLimitMode] = useState<"single" | "multiple">("single");
+  const [maxVotesInput, setMaxVotesInput] = useState("2");
   const [options, setOptions] = useState<Array<{ id?: string; label: string; link: string; pricePerPerson: string }>>([
     { label: "", link: "", pricePerPerson: "" },
     { label: "", link: "", pricePerPerson: "" },
@@ -134,14 +143,21 @@ export function PollsView() {
     const parsed = parsePriceInput(option.pricePerPerson);
     return !parsed.isValid;
   });
+  const parsedMaxVotesInput = Number.parseInt(maxVotesInput, 10);
+  const maxVotesPerUser = voteLimitMode === "single"
+    ? 1
+    : (Number.isFinite(parsedMaxVotesInput) && parsedMaxVotesInput >= 2 ? parsedMaxVotesInput : 0);
+  const hasInvalidVoteLimit = voteLimitMode === "multiple" && maxVotesPerUser < 2;
   const isEditing = editingPollId !== null;
   const minOptionsCount = options.map((opt) => opt.label.trim()).filter(Boolean).length;
-  const isPollFormInvalid = hasInvalidPrice || !question.trim() || minOptionsCount < 2;
+  const isPollFormInvalid = hasInvalidPrice || hasInvalidVoteLimit || !question.trim() || minOptionsCount < 2;
 
   const resetCreateForm = () => {
     setEditingPollId(null);
     setQuestion("");
     setVisibility("public");
+    setVoteLimitMode("single");
+    setMaxVotesInput("2");
     setOptions([
       { label: "", link: "", pricePerPerson: "" },
       { label: "", link: "", pricePerPerson: "" },
@@ -163,6 +179,11 @@ export function PollsView() {
     setEditingPollId(poll.id);
     setQuestion(poll.question);
     setVisibility(poll.visibility);
+    const existingMaxVotesPerUser = Number.isFinite(poll.maxVotesPerUser)
+      ? Math.max(1, Math.floor(poll.maxVotesPerUser))
+      : 1;
+    setVoteLimitMode(existingMaxVotesPerUser > 1 ? "multiple" : "single");
+    setMaxVotesInput(existingMaxVotesPerUser > 1 ? String(existingMaxVotesPerUser) : "2");
     setRequiredUserIds([...poll.requiredUserIds]);
     setOptions(
       poll.options.map((option) => ({
@@ -200,6 +221,7 @@ export function PollsView() {
       options: cleanOptions,
       isClosed: false,
       isPublished,
+      maxVotesPerUser,
       visibility,
       requiredUserIds,
       createdAt: new Date().toISOString(),
@@ -236,6 +258,7 @@ export function PollsView() {
     updatePoll(editingPollId, {
       question: cleanQuestion,
       options: cleanOptions,
+      maxVotesPerUser,
       visibility,
       requiredUserIds,
     });
@@ -244,12 +267,22 @@ export function PollsView() {
 
   const onVote = (poll: Poll, optionId: string) => {
     if (poll.isClosed || !poll.isPublished) return;
-    const selectedOptionId = getUserVoteOptionId(poll, currentUserId);
+    const selectedOptionIds = new Set(getUserVoteOptionIds(poll, currentUserId));
+    const pollMaxVotes = Number.isFinite(poll.maxVotesPerUser)
+      ? Math.max(1, Math.floor(poll.maxVotesPerUser))
+      : 1;
+    if (selectedOptionIds.has(optionId)) {
+      selectedOptionIds.delete(optionId);
+    } else if (selectedOptionIds.size < pollMaxVotes) {
+      selectedOptionIds.add(optionId);
+    } else {
+      return;
+    }
     const nextOptions = poll.options.map((option) => ({
       ...option,
       voterUserIds: option.voterUserIds.filter((id) => id !== currentUserId),
     })).map((option) => (
-      option.id === optionId && selectedOptionId !== optionId
+      selectedOptionIds.has(option.id)
         ? { ...option, voterUserIds: [...option.voterUserIds, currentUserId] }
         : option
     ));
@@ -280,7 +313,10 @@ export function PollsView() {
         <div className="flex flex-col gap-3" style={{ width: "min(900px, 100%)", marginInline: "auto" }}>
           {pollFeed.map((poll) => {
             const totalVotes = poll.options.reduce((sum, option) => sum + option.voterUserIds.length, 0);
-            const selectedOptionId = getUserVoteOptionId(poll, currentUserId);
+            const selectedOptionIds = new Set(getUserVoteOptionIds(poll, currentUserId));
+            const pollMaxVotes = Number.isFinite(poll.maxVotesPerUser)
+              ? Math.max(1, Math.floor(poll.maxVotesPerUser))
+              : 1;
             const requiredSet = new Set(poll.requiredUserIds);
             const requiredCount = requiredSet.size;
             const requiredDone = poll.requiredUserIds.filter((userId) => didUserVote(poll, userId)).length;
@@ -303,6 +339,9 @@ export function PollsView() {
                       )}
                       <Badge variant="neutral">
                         {poll.visibility === "anonymous" ? "Anonymous voting" : "Public voting"}
+                      </Badge>
+                      <Badge variant="neutral">
+                        {pollMaxVotes === 1 ? "1 vote per person" : `Up to ${pollMaxVotes} votes per person`}
                       </Badge>
                       <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
                         {totalVotes} vote{totalVotes === 1 ? "" : "s"}
@@ -359,7 +398,7 @@ export function PollsView() {
                   {poll.options.map((option) => {
                     const voteCount = option.voterUserIds.length;
                     const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
-                    const isSelected = selectedOptionId === option.id;
+                    const isSelected = selectedOptionIds.has(option.id);
                     const priceDisplay = getPriceDisplay(option as {
                       pricePerPerson?: unknown;
                       pricePerPersonMin?: unknown;
@@ -369,7 +408,8 @@ export function PollsView() {
                       .filter((user) => option.voterUserIds.includes(user.id))
                       .map((user) => user.name);
 
-                    const isVotingDisabled = poll.isClosed || !poll.isPublished;
+                    const isAtVoteLimit = selectedOptionIds.size >= pollMaxVotes;
+                    const isVotingDisabled = poll.isClosed || !poll.isPublished || (!isSelected && isAtVoteLimit);
                     return (
                       <button
                         key={option.id}
@@ -386,7 +426,28 @@ export function PollsView() {
                         }}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span style={{ fontWeight: 600, fontSize: "var(--font-md)" }}>{option.label}</span>
+                          {option.link ? (
+                            <a
+                              href={toHref(option.link)}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontWeight: 600,
+                                fontSize: "var(--font-md)",
+                                color: "var(--color-accent)",
+                                textDecoration: "underline",
+                              }}
+                            >
+                              <span>{option.label}</span>
+                              <span aria-hidden="true" style={{ fontSize: "0.9em", lineHeight: 1 }}>↗</span>
+                            </a>
+                          ) : (
+                            <span style={{ fontWeight: 600, fontSize: "var(--font-md)" }}>{option.label}</span>
+                          )}
                           <span style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-sm)" }}>
                             {voteCount} ({pct}%)
                           </span>
@@ -394,19 +455,6 @@ export function PollsView() {
                         {priceDisplay && (
                           <p style={{ marginTop: 6, fontSize: "var(--font-sm)", color: "var(--color-text-secondary)" }}>
                             {priceDisplay}
-                          </p>
-                        )}
-                        {option.link && (
-                          <p style={{ marginTop: 6, fontSize: "var(--font-sm)" }}>
-                            <a
-                              href={toHref(option.link)}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ color: "var(--color-accent)", textDecoration: "underline" }}
-                            >
-                              {option.link}
-                            </a>
                           </p>
                         )}
                         <div
@@ -576,6 +624,31 @@ export function PollsView() {
                     <option value="anonymous">Anonymous (hide names)</option>
                   </select>
                 </label>
+                <label style={{ fontSize: "var(--font-sm)", fontWeight: 600 }}>
+                  Votes per person
+                  <select
+                    value={voteLimitMode}
+                    onChange={(e) => setVoteLimitMode(e.target.value as "single" | "multiple")}
+                    style={{ ...inputStyle, minWidth: 210 }}
+                  >
+                    <option value="single">One vote only</option>
+                    <option value="multiple">Allow multiple votes</option>
+                  </select>
+                </label>
+                {voteLimitMode === "multiple" && (
+                  <label style={{ fontSize: "var(--font-sm)", fontWeight: 600 }}>
+                    Max votes
+                    <input
+                      type="number"
+                      min={2}
+                      step={1}
+                      value={maxVotesInput}
+                      onChange={(e) => setMaxVotesInput(e.target.value)}
+                      placeholder="2"
+                      style={{ ...inputStyle, minWidth: 140 }}
+                    />
+                  </label>
+                )}
               </div>
 
               <div>

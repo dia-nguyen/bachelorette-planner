@@ -287,6 +287,7 @@ export interface Poll {
   options: PollOption[];
   isClosed: boolean;
   isPublished: boolean;
+  maxVotesPerUser: number;
   visibility: PollVisibility;
   requiredUserIds: string[];
   createdAt: string; // ISO

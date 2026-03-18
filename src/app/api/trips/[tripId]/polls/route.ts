@@ -13,6 +13,7 @@ const FIELD_MAP: Record<string, string> = {
   options: "options",
   isClosed: "is_closed",
   isPublished: "is_published",
+  maxVotesPerUser: "max_votes_per_user",
   visibility: "visibility",
   requiredUserIds: "required_user_ids",
   createdAt: "created_at",
@@ -57,7 +58,7 @@ function stripUnsupportedPollColumns(
 ) {
   if (!message) return payload;
 
-  const unsupported = ["visibility", "required_user_ids", "is_published"];
+  const unsupported = ["visibility", "required_user_ids", "is_published", "max_votes_per_user"];
   const lowered = message.toLowerCase();
   const cleaned = { ...payload };
   let removedAny = false;
@@ -219,7 +220,7 @@ export async function PATCH(
 
     const { data: existingPoll, error: existingError } = await supabase
       .from("polls")
-      .select("id,options,is_closed,is_published")
+      .select("id,options,is_closed,is_published,max_votes_per_user")
       .eq("id", id)
       .eq("trip_id", tripId)
       .maybeSingle();
@@ -233,22 +234,39 @@ export async function PATCH(
 
     const previousOptions = Array.isArray(existingPoll.options) ? existingPoll.options : [];
     const requestedOptions = Array.isArray(patch.options) ? patch.options : [];
-
-    const selectedOptionId = requestedOptions.find((option) => {
-      if (!option || typeof option !== "object") return false;
-      const typed = option as { id?: unknown; voterUserIds?: unknown };
-      return Array.isArray(typed.voterUserIds) && typed.voterUserIds.includes(user.id) && typeof typed.id === "string";
-    }) as { id: string } | undefined;
-
-    const selectedId = selectedOptionId?.id ?? null;
-    if (selectedId && !previousOptions.some((option) => option?.id === selectedId)) {
-      return NextResponse.json({ error: "Invalid vote option." }, { status: 400 });
+    const maxVotesPerUser = Number.isFinite(existingPoll.max_votes_per_user)
+      ? Math.max(1, Math.floor(existingPoll.max_votes_per_user as number))
+      : 1;
+    const selectedIds = new Set(
+      requestedOptions
+        .filter((option) => option && typeof option === "object")
+        .map((option) => {
+          const typed = option as { id?: unknown; voterUserIds?: unknown };
+          if (typeof typed.id !== "string") return null;
+          if (!Array.isArray(typed.voterUserIds) || !typed.voterUserIds.includes(user.id)) return null;
+          return typed.id;
+        })
+        .filter((id): id is string => Boolean(id)),
+    );
+    const allowedOptionIds = new Set(
+      previousOptions
+        .filter((option) => option && typeof option === "object")
+        .map((option) => (typeof option.id === "string" ? option.id : null))
+        .filter((id): id is string => Boolean(id)),
+    );
+    for (const id of selectedIds) {
+      if (!allowedOptionIds.has(id)) {
+        return NextResponse.json({ error: "Invalid vote option." }, { status: 400 });
+      }
+    }
+    if (selectedIds.size > maxVotesPerUser) {
+      return NextResponse.json({ error: `You can select up to ${maxVotesPerUser} options.` }, { status: 400 });
     }
 
     const nextOptions = previousOptions.map((option) => {
       const existingVoters = Array.isArray(option?.voterUserIds) ? option.voterUserIds as string[] : [];
       const withoutMe = existingVoters.filter((voterId) => voterId !== user.id);
-      if (selectedId && option?.id === selectedId) {
+      if (option?.id && selectedIds.has(option.id)) {
         return { ...option, voterUserIds: [...withoutMe, user.id] };
       }
       return { ...option, voterUserIds: withoutMe };

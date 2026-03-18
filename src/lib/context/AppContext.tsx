@@ -70,6 +70,7 @@ function normalizePoll(raw: Partial<Poll> & {
   options: Poll["options"];
   isClosed: boolean;
   isPublished?: boolean;
+  maxVotesPerUser?: number;
 }): Poll {
   const legacyPollLinks = Array.isArray((raw as { links?: unknown; }).links)
     ? ((raw as { links?: string[]; }).links ?? [])
@@ -80,11 +81,15 @@ function normalizePoll(raw: Partial<Poll> & {
       link: option.link ?? legacyPollLinks[index] ?? undefined,
     }))
     : [];
+  const normalizedMaxVotesPerUser = Number.isFinite(raw.maxVotesPerUser)
+    ? Math.max(1, Math.floor(raw.maxVotesPerUser as number))
+    : 1;
 
   return {
     ...raw,
     options: normalizedOptions,
     isPublished: raw.isPublished ?? true,
+    maxVotesPerUser: normalizedMaxVotesPerUser,
     visibility: raw.visibility === "anonymous" ? "anonymous" : "public",
     requiredUserIds: Array.isArray(raw.requiredUserIds) ? raw.requiredUserIds : [],
     createdAt: raw.createdAt ?? "1970-01-01T00:00:00.000Z",
@@ -101,6 +106,7 @@ function mapPollRow(row: any): Poll {
     options: (row.options ?? []) as Poll["options"],
     isClosed: Boolean(row.is_closed ?? row.isClosed),
     isPublished: Boolean(row.is_published ?? row.isPublished ?? true),
+    maxVotesPerUser: Number(row.max_votes_per_user ?? row.maxVotesPerUser ?? 1),
     visibility: row.visibility as Poll["visibility"] | undefined,
     requiredUserIds: (row.required_user_ids ?? row.requiredUserIds ?? []) as string[],
     createdAt: row.created_at ?? row.createdAt,

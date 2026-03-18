@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS polls (
   options             JSONB NOT NULL DEFAULT '[]',
   is_closed           BOOLEAN NOT NULL DEFAULT false,
   is_published        BOOLEAN NOT NULL DEFAULT false,
+  max_votes_per_user  INTEGER NOT NULL DEFAULT 1 CHECK (max_votes_per_user >= 1),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
