@@ -30,6 +30,20 @@ export function ContextPanel({
     return () => document.removeEventListener("keydown", handler);
   }, [isOpen, onClose]);
 
+  // Lock background scrolling while the panel is open so touch/wheel scroll
+  // stays inside the panel body.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -53,6 +67,7 @@ export function ContextPanel({
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          overscrollBehavior: "contain",
           background: "var(--color-bg-surface)",
           boxShadow: "var(--shadow-2)",
           animation: "slideInRight 0.25s ease-out",
@@ -101,6 +116,7 @@ export function ContextPanel({
           className="flex-1 overflow-y-auto p-5"
           style={{
             WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
             paddingBottom: "calc(20px + env(safe-area-inset-bottom))",
           }}
         >
