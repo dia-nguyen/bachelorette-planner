@@ -336,6 +336,33 @@ export function MoodboardView() {
     [moodboardNotes],
   );
 
+  const handleAddNote = useCallback(() => {
+    const center = getViewportCenterCanvasPoint();
+    const width = 260;
+    const height = 200;
+
+    pushUndo();
+    addMoodboardNote({
+      title: "",
+      text: "",
+      images: [],
+      color: "yellow",
+      x: center.x - width / 2,
+      y: center.y - height / 2,
+      width,
+      height,
+      zIndex: getNextZIndex(),
+      createdByUserId: currentUserId,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    addMoodboardNote,
+    currentUserId,
+    getNextZIndex,
+    getViewportCenterCanvasPoint,
+    pushUndo,
+  ]);
+
   const handleCanvasPasteImage = useCallback(
     async (file: File) => {
       const center = getViewportCenterCanvasPoint();
@@ -543,6 +570,33 @@ export function MoodboardView() {
           />
 
           {/* Zoom controls */}
+          <button
+            onClick={handleAddNote}
+            title="Add sticky note"
+            style={{
+              padding: "4px 10px",
+              borderRadius: 6,
+              border: "1px solid #D1D5DB",
+              background: "white",
+              cursor: "pointer",
+              fontSize: 11,
+              color: "#374151",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            + Sticky note
+          </button>
+
+          <div
+            style={{
+              width: 1,
+              height: 20,
+              background: "#E5E7EB",
+              margin: "0 4px",
+            }}
+          />
+
           <button
             onClick={zoomOut}
             title="Zoom out"
