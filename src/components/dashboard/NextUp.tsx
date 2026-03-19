@@ -8,6 +8,13 @@ interface NextUpProps {
   onEventClick: (id: string) => void;
 }
 
+const EVENT_STATUS_LABEL: Record<TripEvent["status"], string> = {
+  DRAFT: "Draft",
+  PLANNED: "Pending",
+  CONFIRMED: "Confirmed",
+  CANCELED: "Canceled",
+};
+
 function formatEventDate(iso: string): { day: string; date: string; } {
   const d = new Date(iso);
   const day = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase(); // MON, TUE…
@@ -35,8 +42,7 @@ export function NextUp({ events, onEventClick }: NextUpProps) {
         <div className="flex flex-col gap-3">
           {events.map((ev) => {
             const { day, date } = formatEventDate(ev.startAt);
-            const statusLabel =
-              ev.status === "DRAFT" ? "Draft" : ev.status === "PLANNED" ? "Pending" : ev.status;
+            const statusLabel = EVENT_STATUS_LABEL[ev.status];
             const variant = ev.status === "DRAFT" ? "negative" : eventStatusVariant(ev.status);
 
             return (

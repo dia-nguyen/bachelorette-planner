@@ -4,6 +4,9 @@ import { Card } from "@/components/ui";
 import type { DashboardKPIs, TasksSummary } from "@/lib/data";
 import { formatCurrency } from "@/lib/domain";
 
+const TODO_PASTEL = "#f9a8d4";
+const TODO_PASTEL_BORDER = "#ec4899";
+
 interface KPICardsProps {
   kpis: DashboardKPIs;
   tasksSummary: TasksSummary;
@@ -68,7 +71,7 @@ export function KPICards({ kpis, tasksSummary }: KPICardsProps) {
               In Progress {tasksSummary.inProgress}
             </div>
             <div className="flex items-center gap-1">
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-bg-muted)", border: "1px solid var(--color-border)", display: "inline-block" }} />
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: TODO_PASTEL, border: `1px solid ${TODO_PASTEL_BORDER}`, display: "inline-block" }} />
               To Do {tasksSummary.total - tasksSummary.inProgress - tasksSummary.done}
             </div>
           </div>
@@ -132,7 +135,7 @@ function TaskDonut({ summary }: { summary: TasksSummary; }) {
   return (
     <svg width={size} height={size} style={{ transform: "rotate(-90deg)", flexShrink: 0 }}>
       {/* Track */}
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-bg-muted)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TODO_PASTEL} strokeWidth={stroke} />
       {/* Done segment */}
       {doneLen > 0 && (
         <circle
