@@ -1,15 +1,12 @@
-"use client";
+import { getPlannerTabFromQuery, getPlannerTabPath } from "@/lib/navigation/plannerTabs";
+import { redirect } from "next/navigation";
 
-import { AppShell } from "@/components/AppShell";
-import { AppProvider } from "@/lib/context";
-import { Suspense } from "react";
-
-export default function Home() {
-  return (
-    <AppProvider>
-      <Suspense>
-        <AppShell />
-      </Suspense>
-    </AppProvider>
-  );
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const tab = getPlannerTabFromQuery(params.tab);
+  redirect(getPlannerTabPath(tab));
 }

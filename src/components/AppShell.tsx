@@ -9,7 +9,8 @@ import { BudgetView, DashboardView, EventsView, GuestsView, ItineraryView, Moodb
 import { PlanActivityForm } from "@/components/views/PlanActivityForm";
 import { useApp } from "@/lib/context";
 import { useAuth } from "@/lib/context/AuthContext";
-import { useRouter, useSearchParams } from "next/navigation";
+import { PLANNER_TABS, PLANNER_TAB_PATHS, getPlannerTabFromPathname, getPlannerTabPath } from "@/lib/navigation/plannerTabs";
+import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { HiOutlinePlus } from "react-icons/hi";
 
@@ -170,10 +171,9 @@ function LoadingState() {
 }
 
 export function AppShell() {
-  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const router = useRouter();
-  const initialTab = searchParams.get("tab") ?? "dashboard";
-  const [activeTab, setActiveTabState] = useState(initialTab);
+  const activeTab = getPlannerTabFromPathname(pathname ?? "/");
   const hasMounted = useSyncExternalStore(
     () => () => { },
     () => true,
@@ -193,16 +193,17 @@ export function AppShell() {
     return () => media.removeEventListener("change", sync);
   }, []);
 
-  const setActiveTab = useCallback((tab: string) => {
-    setActiveTabState(tab);
-    const url = new URL(window.location.href);
-    if (tab === "dashboard") {
-      url.searchParams.delete("tab");
-    } else {
-      url.searchParams.set("tab", tab);
-    }
-    router.replace(url.pathname + url.search, { scroll: false });
+  useEffect(() => {
+    PLANNER_TABS.forEach((tab) => {
+      router.prefetch(PLANNER_TAB_PATHS[tab]);
+    });
   }, [router]);
+
+  const setActiveTab = useCallback((tab: string) => {
+    const nextPath = getPlannerTabPath(tab);
+    if ((pathname ?? "/") === nextPath) return;
+    router.push(nextPath, { scroll: false });
+  }, [pathname, router]);
 
   const tripName = app.trip?.name ?? "Trip Planner";
   const isAdmin = app.currentRole === "MOH_ADMIN";
