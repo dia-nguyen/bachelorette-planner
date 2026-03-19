@@ -36,17 +36,23 @@ export function ContextPanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40"
-        style={{ background: "rgba(0,0,0,0.08)" }}
+        className="fixed inset-0"
+        style={{ background: "rgba(0,0,0,0.08)", zIndex: 380 }}
         onClick={onClose}
       />
       {/* Panel */}
       <aside
         ref={panelRef}
-        className="fixed top-0 right-0 z-50 h-full overflow-y-auto"
+        className="fixed top-0 right-0"
         style={{
+          zIndex: 400,
           width: "var(--context-panel-width)",
           maxWidth: "90vw",
+          height: "100dvh",
+          maxHeight: "100dvh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           background: "var(--color-bg-surface)",
           boxShadow: "var(--shadow-2)",
           animation: "slideInRight 0.25s ease-out",
@@ -55,7 +61,14 @@ export function ContextPanel({
         {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: "1px solid var(--color-border)" }}
+          style={{
+            borderBottom: "1px solid var(--color-border)",
+            position: "sticky",
+            top: 0,
+            zIndex: 2,
+            background: "var(--color-bg-surface)",
+            paddingTop: "max(16px, env(safe-area-inset-top))",
+          }}
         >
           <div className="flex items-center gap-2">
             {badge}
@@ -84,7 +97,15 @@ export function ContextPanel({
         </div>
 
         {/* Body */}
-        <div className="p-5">{children}</div>
+        <div
+          className="flex-1 overflow-y-auto p-5"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            paddingBottom: "calc(20px + env(safe-area-inset-bottom))",
+          }}
+        >
+          {children}
+        </div>
       </aside>
 
       <style jsx global>{`
