@@ -116,6 +116,7 @@ export function ItineraryView() {
           Day-by-day schedule of planned, confirmed, and timed draft events
         </p>
         <div
+          className="ml-auto"
           role="group"
           aria-label="Itinerary view mode"
           style={{

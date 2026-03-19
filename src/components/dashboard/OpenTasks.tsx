@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import type { Task, User } from "@/lib/data";
 import type { TasksSummary } from "@/lib/data/types";
@@ -11,6 +11,24 @@ interface OpenTasksProps {
   users: User[];
   onTaskClick: (id: string) => void;
 }
+
+const PRIORITY_STYLES: Record<Task["priority"], { label: string; fill: string; ring: string }> = {
+  HIGH: {
+    label: "High",
+    fill: "#f87171",
+    ring: "#fca5a5",
+  },
+  MEDIUM: {
+    label: "Medium",
+    fill: "#f59e0b",
+    ring: "#fde68a",
+  },
+  LOW: {
+    label: "Low",
+    fill: "var(--color-accent)",
+    ring: "var(--color-accent-soft)",
+  },
+};
 
 function formatDue(dueAt: string | null): { label: string; urgent: boolean; } {
   if (!dueAt) return { label: "No due date", urgent: false };
@@ -23,14 +41,7 @@ function formatDue(dueAt: string | null): { label: string; urgent: boolean; } {
   return { label: `Due ${due.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`, urgent: false };
 }
 
-function getTaskCompletionPercent(task: Task): number {
-  const subtasks = task.subtasks ?? [];
-  if (subtasks.length === 0) return task.status === "DONE" ? 100 : 0;
-  const done = subtasks.filter((s) => s.isDone).length;
-  return Math.round((done / subtasks.length) * 100);
-}
-
-export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps) {
+export function OpenTasks({ tasks, summary: _summary, users, onTaskClick }: OpenTasksProps) {
   const openTasks = [...tasks]
     .filter((t) => t.status !== "DONE")
     .sort((a, b) => {
@@ -56,8 +67,7 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
           {openTasks.slice(0, 6).map((task) => {
             const assignees = users.filter((u) => (task.assigneeUserIds ?? []).includes(u.id));
             const { label: dueLabel, urgent } = formatDue(task.dueAt);
-            const completionPercent = getTaskCompletionPercent(task);
-            const hasSubtasks = (task.subtasks?.length ?? 0) > 0;
+            const priorityStyle = PRIORITY_STYLES[task.priority];
 
             return (
               <button
@@ -71,13 +81,18 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
                   cursor: "pointer",
                 }}
               >
-                {/* Checkbox placeholder */}
                 <span
+                  title={`${priorityStyle.label} priority`}
+                  aria-label={`${priorityStyle.label} priority`}
                   style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 4,
-                    border: "2px solid var(--color-border)",
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: priorityStyle.fill,
+                    boxShadow: `0 0 0 2px ${priorityStyle.ring}`,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     flexShrink: 0,
                   }}
                 />
@@ -107,10 +122,9 @@ export function OpenTasks({ tasks, summary, users, onTaskClick }: OpenTasksProps
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {hasSubtasks && <Badge variant="accent">{completionPercent}%</Badge>}
-                  <Badge variant={urgent ? "negative" : "neutral"}>{dueLabel}</Badge>
-                </div>
+                <span style={{ fontSize: "var(--font-sm)", color: urgent ? "#b91c1c" : "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+                  {dueLabel}
+                </span>
               </button>
             );
           })}

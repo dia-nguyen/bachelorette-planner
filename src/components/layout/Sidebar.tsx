@@ -51,11 +51,11 @@ export function Sidebar({ activeTab, onTabChange, onNewTrip, onSignOut, isMobile
 
   if (isMobile) {
     const primaryMobileItems: NavItem[] = navItems.filter((item) =>
-      ["dashboard", "tasks", "events", "budget"].includes(item.id),
+      ["dashboard", "tasks", "itinerary", "budget"].includes(item.id),
     );
     const moreMobileItems: NavItem[] = [
       ...navItems.filter((item) =>
-        ["itinerary", "polls", "moodboard", "guests"].includes(item.id),
+        ["events", "polls", "moodboard", "guests"].includes(item.id),
       ),
       { icon: <HiOutlineCog size={20} />, label: "Settings", id: "settings" },
     ];
