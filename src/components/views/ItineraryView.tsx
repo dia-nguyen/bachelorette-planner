@@ -168,24 +168,26 @@ export function ItineraryView() {
         <div className="flex flex-col gap-4">
           {dayGroups.map((group) => (
             <div key={group.key}>
-              <h3
-                style={{
-                  margin: "0 0 8px",
-                  fontSize: "var(--font-sm)",
-                  fontWeight: 700,
-                  letterSpacing: 0.4,
-                  textTransform: "uppercase",
-                  color: "var(--color-accent)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "4px 12px",
-                  borderRadius: "var(--radius-pill)",
-                  background: "var(--color-accent-soft)",
-                  border: "1px solid var(--color-accent)",
-                }}
-              >
-                {group.label}
-              </h3>
+              <div className="mb-2 flex justify-center sm:justify-start">
+                <h3
+                  style={{
+                    fontSize: "var(--font-sm)",
+                    fontWeight: 700,
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                    color: "var(--color-accent)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "4px 12px",
+                    borderRadius: "var(--radius-pill)",
+                    background: "var(--color-accent-soft)",
+                    border: "1px solid var(--color-accent)",
+                    margin: 0,
+                  }}
+                >
+                  {group.label}
+                </h3>
+              </div>
 
               {group.events.length === 0 ? (
                 <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--color-text-secondary)", fontStyle: "italic" }}>
