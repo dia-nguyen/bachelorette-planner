@@ -206,7 +206,17 @@ export function AppShell() {
 
   const tripName = app.trip?.name ?? "Trip Planner";
   const isAdmin = app.currentRole === "MOH_ADMIN";
-  const showLoadingState = !hasMounted || auth.loading || app.isLoadingTrips || app.isLoadingData;
+  const isBootstrappingInitialTripData =
+    !auth.loading &&
+    !app.isLoadingTrips &&
+    app.availableTrips.length > 0 &&
+    !app.trip;
+  const showLoadingState =
+    !hasMounted ||
+    auth.loading ||
+    app.isLoadingTrips ||
+    app.isLoadingData ||
+    isBootstrappingInitialTripData;
 
   const TAB_TITLES: Record<string, string> = {
     dashboard: tripName,
