@@ -19,7 +19,6 @@ const MAX_SCALE = 2;
 const DEFAULT_PASTED_NOTE_WIDTH = 320;
 const DEFAULT_PASTED_NOTE_HEIGHT = 280;
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 768px)";
-const MOBILE_BOTTOM_NAV_HEIGHT = 74;
 
 export function MoodboardView() {
   const {
@@ -696,7 +695,7 @@ export function MoodboardView() {
           style={{
             position: "absolute",
             left: "50%",
-            bottom: `calc(${MOBILE_BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 10px)`,
+            top: 14,
             transform: "translateX(-50%)",
             zIndex: 1000,
             background: "rgba(17,24,39,0.78)",

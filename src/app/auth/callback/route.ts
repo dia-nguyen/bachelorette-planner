@@ -9,6 +9,36 @@ interface StubUserRow {
   custom_fields: Record<string, string> | null;
 }
 
+interface ExistingUserRow {
+  email: string | null;
+  name: string | null;
+  avatar_url: string | null;
+  custom_fields: Record<string, string> | null;
+}
+
+function pickFirstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function normalizeCustomFields(
+  value: Record<string, string> | null | undefined,
+): Record<string, string> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([key, entryValue]) =>
+        typeof key === "string" &&
+        key.length > 0 &&
+        typeof entryValue === "string",
+    ),
+  );
+}
+
 async function migrateScalarUserReference(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
@@ -246,11 +276,10 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
 
     // Pull name and avatar from Google OAuth metadata
-    const name =
-      user.user_metadata?.full_name ??
-      user.user_metadata?.name ??
-      user.email?.split("@")[0] ??
-      "Guest";
+    const metadataName = pickFirstNonEmpty(
+      user.user_metadata?.full_name,
+      user.user_metadata?.name,
+    );
     const avatarUrl =
       user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null;
 
@@ -285,13 +314,39 @@ export async function GET(request: Request) {
       }
     }
 
+    const { data: existingUser } = await admin
+      .from("users")
+      .select("email,name,avatar_url,custom_fields")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const existingUserRow = (existingUser ?? null) as ExistingUserRow | null;
+    const existingCustomFields = normalizeCustomFields(existingUserRow?.custom_fields);
+    const stubCustomFields = normalizeCustomFields(stubUser?.custom_fields);
+    const mergedCustomFields = {
+      ...existingCustomFields,
+      ...stubCustomFields,
+    };
+
+    const resolvedEmail =
+      pickFirstNonEmpty(user.email, existingUserRow?.email) ?? "";
+    const resolvedName =
+      pickFirstNonEmpty(
+        metadataName,
+        existingUserRow?.name,
+        stubUser?.name,
+        user.email?.split("@")[0],
+      ) ?? "Guest";
+    const resolvedAvatarUrl =
+      avatarUrl ?? existingUserRow?.avatar_url ?? stubUser?.avatar_url ?? null;
+
     const { error: upsertError } = await admin.from("users").upsert(
       {
         id: user.id,
-        email: user.email ?? "",
-        name: name || stubUser?.name || "Guest",
-        avatar_url: avatarUrl ?? stubUser?.avatar_url ?? null,
-        custom_fields: stubUser?.custom_fields ?? {},
+        email: resolvedEmail.toLowerCase(),
+        name: resolvedName,
+        avatar_url: resolvedAvatarUrl,
+        custom_fields: mergedCustomFields,
       },
       { onConflict: "id" },
     );
@@ -302,7 +357,7 @@ export async function GET(request: Request) {
     }
 
     if (stubUser) {
-        await mergeStubIntoUser(admin, stubUser.id, user.id);
+      await mergeStubIntoUser(admin, stubUser.id, user.id);
     }
 
     // Clean up any previously-orphaned stubs (merged-*@placeholder.internal) in the
