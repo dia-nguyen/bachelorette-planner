@@ -1,10 +1,23 @@
-const CACHE_PREFIX = "bp-pwa-v3";
+const CACHE_PREFIX = "bp-pwa-v6";
 const STATIC_CACHE = `${CACHE_PREFIX}-static`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime`;
 const API_CACHE = `${CACHE_PREFIX}-api`;
 
+const PLANNER_ROUTES = [
+  "/dashboard",
+  "/itinerary",
+  "/tasks",
+  "/events",
+  "/budget",
+  "/polls",
+  "/moodboard",
+  "/guests",
+  "/settings",
+];
+
 const PRECACHE_URLS = [
   "/",
+  ...PLANNER_ROUTES,
   "/offline.html",
   "/manifest.webmanifest",
   "/icon-192.png",
@@ -20,7 +33,7 @@ self.addEventListener("install", (event) => {
         PRECACHE_URLS.map(async (url) => {
           try {
             const response = await fetch(new Request(url, { cache: "reload" }));
-            if (response.ok) {
+            if (response.ok && (!PLANNER_ROUTES.includes(url) || !response.redirected)) {
               await cache.put(url, response.clone());
             }
           } catch {
@@ -61,6 +74,7 @@ function canCache(response) {
 function isRedirectLike(response) {
   if (!response) return true;
   if (response.type === "opaqueredirect") return true;
+  if (response.redirected) return true;
   return response.status >= 300 && response.status < 400;
 }
 
@@ -119,10 +133,27 @@ async function networkFirst(request, cacheName, fallbackUrl) {
 async function navigationNetworkFirst(request) {
   const cache = await caches.open(RUNTIME_CACHE);
   const url = new URL(request.url);
-  const pathKey = `${url.origin}${url.pathname}`;
+  const pathKey = url.pathname;
 
   try {
-    const response = await fetch(request, { redirect: "follow" });
+    let response = await fetch(request, { redirect: "follow" });
+    if (response.redirected && response.url) {
+      try {
+        const canonical = await fetch(response.url, {
+          redirect: "follow",
+          credentials: "include",
+        });
+        if (canonical && !canonical.redirected) {
+          response = canonical;
+        }
+      } catch {
+        // Keep original response if canonical fetch fails.
+      }
+    }
+    if (!isUsableNavigationResponse(request.url, response)) {
+      throw new Error("unusable navigation response");
+    }
+
     if (canCache(response) && isUsableNavigationResponse(request.url, response)) {
       try {
         await cache.put(request, response.clone());
@@ -148,6 +179,12 @@ async function navigationNetworkFirst(request) {
       ignoreVary: true,
     });
     if (isUsableNavigationResponse(request.url, byPath)) return byPath;
+
+    const globalByPath = await caches.match(pathKey, {
+      ignoreSearch: true,
+      ignoreVary: true,
+    });
+    if (isUsableNavigationResponse(request.url, globalByPath)) return globalByPath;
 
     const appShell = await caches.match("/", {
       ignoreSearch: true,
@@ -220,7 +257,7 @@ self.addEventListener("fetch", (event) => {
   const isStaticAsset =
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/_next/image") ||
-    /\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$/i.test(url.pathname);
+    /\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?|webmanifest)$/i.test(url.pathname);
 
   if (isStaticAsset) {
     event.respondWith(respondSafely(() => staleWhileRevalidate(request, STATIC_CACHE)));
