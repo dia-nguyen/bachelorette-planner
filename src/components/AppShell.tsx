@@ -14,6 +14,21 @@ import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { HiOutlinePlus } from "react-icons/hi";
 
+function subscribeOnlineStatus(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => { };
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+function getOnlineSnapshot(): boolean {
+  if (typeof navigator === "undefined") return true;
+  return navigator.onLine;
+}
+
 function CreateTripModal({ onClose }: { onClose: () => void; }) {
   const { createTrip } = useApp();
   const [name, setName] = useState("");
@@ -179,6 +194,11 @@ export function AppShell() {
     () => true,
     () => false,
   );
+  const isOnline = useSyncExternalStore(
+    subscribeOnlineStatus,
+    getOnlineSnapshot,
+    () => true,
+  );
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -218,6 +238,7 @@ export function AppShell() {
     app.isLoadingTrips ||
     app.isLoadingData ||
     isBootstrappingInitialTripData;
+  const showOfflineReadOnlyBubble = hasMounted && !isOnline;
 
   const TAB_TITLES: Record<string, string> = {
     dashboard: tripName,
@@ -534,6 +555,32 @@ export function AppShell() {
       >
         {renderPanelContent()}
       </ContextPanel>
+
+      {showOfflineReadOnlyBubble && (
+        <div
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: isMobile
+              ? "calc(74px + env(safe-area-inset-bottom) + 10px)"
+              : "16px",
+            transform: "translateX(-50%)",
+            zIndex: 250,
+            background: "rgba(17,24,39,0.78)",
+            color: "#F9FAFB",
+            borderRadius: 999,
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 0.2,
+            pointerEvents: "none",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Offline mode: Read Only
+        </div>
+      )}
 
       {isMobile && activeTab !== "polls" && activeTab !== "moodboard" && activeTab !== "guests" && !showPlanForm && (
         <button
