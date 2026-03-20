@@ -500,7 +500,6 @@ export function AppShell() {
           onImportJSON={app.importData}
           onSignOut={!auth.isDemo ? handleSignOut : undefined}
         />
-
         <main
           className={`flex-1 overflow-y-auto ${activeTab === "moodboard" ? "p-0" : "p-2 sm:p-3 md:p-6"}`}
           style={{

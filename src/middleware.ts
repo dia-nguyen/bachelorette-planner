@@ -2,6 +2,11 @@ import { updateSession } from "@/lib/supabase/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATH_PREFIXES = ["/login", "/auth/callback", "/invite"];
+const PUBLIC_FILE_PATHS = new Set([
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/offline.html",
+]);
 
 export async function middleware(request: NextRequest) {
   // TODO: Move to server-only env var. NEXT_PUBLIC_ prefix makes this client-readable.
@@ -12,6 +17,10 @@ export async function middleware(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
+  if (PUBLIC_FILE_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
   const isPublicPath = PUBLIC_PATH_PREFIXES.some((prefix) =>
     pathname.startsWith(prefix),
   );
