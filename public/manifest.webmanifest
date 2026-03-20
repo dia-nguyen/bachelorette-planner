@@ -1,6 +1,6 @@
 {
   "name": "Bachelorette Planner",
-  "short_name": "Bach Planner",
+  "short_name": "Bachelorette Planner",
   "description": "Plan the perfect bachelorette weekend with events, tasks, budget, and guests.",
   "start_url": "/",
   "scope": "/",

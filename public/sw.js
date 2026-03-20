@@ -1,4 +1,4 @@
-const CACHE_PREFIX = "bp-pwa-v6";
+const CACHE_PREFIX = "bp-pwa-v7";
 const STATIC_CACHE = `${CACHE_PREFIX}-static`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime`;
 const API_CACHE = `${CACHE_PREFIX}-api`;

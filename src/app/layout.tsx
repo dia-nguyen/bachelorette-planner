@@ -8,9 +8,14 @@ export const metadata: Metadata = {
   title: "Bachelorette Planner",
   description: "Plan the perfect bachelorette weekend — budget, events, tasks, guests.",
   manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    title: "Bachelorette Planner",
+    capable: true,
+    statusBarStyle: "default",
+  },
   icons: {
     icon: "/favicon.png",
-    apple: "/app-icon.png",
+    apple: "/apple-touch-icon.png",
   },
 };
 
